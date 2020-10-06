@@ -6,7 +6,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
-import org.qortal.controller.Controller;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryFactory;
@@ -42,7 +41,7 @@ public class RepositoryMaintenance {
 
 		LOGGER.info("Opening repository");
 		try {
-			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Controller.getRepositoryUrl());
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Settings.getInstance().getRepositoryPath());
 			RepositoryManager.setRepositoryFactory(repositoryFactory);
 		} catch (DataException e) {
 			// If exception has no cause then repository is in use by some other process.

@@ -11,7 +11,6 @@ import org.bitcoinj.core.LegacyAddress;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.script.Script.ScriptType;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.qortal.controller.Controller;
 import org.qortal.crosschain.BTC;
 import org.qortal.crosschain.BTCP2SH;
 import org.qortal.crypto.Crypto;
@@ -85,7 +84,7 @@ public class BuildP2SH {
 		}
 
 		try {
-			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Controller.getRepositoryUrl());
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Settings.getInstance().getRepositoryPath());
 			RepositoryManager.setRepositoryFactory(repositoryFactory);
 		} catch (DataException e) {
 			throw new RuntimeException("Repository startup issue: " + e.getMessage());

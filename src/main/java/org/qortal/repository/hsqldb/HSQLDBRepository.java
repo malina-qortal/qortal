@@ -76,9 +76,8 @@ public class HSQLDBRepository implements Repository {
 
 	// Constructors
 
-	// NB: no visibility modifier so only callable from within same package
-	/* package */ HSQLDBRepository(Connection connection) throws DataException {
-		this.connection = connection;
+	/*package*/ HSQLDBRepository(Connection blockchainConnection, Connection nodeLocalConnection) throws DataException {
+		this.connection = blockchainConnection;
 
 		this.slowQueryThreshold = Settings.getInstance().getSlowQueryThreshold();
 		if (this.slowQueryThreshold != null)

@@ -46,10 +46,6 @@ public class Common {
 
 	private static final Logger LOGGER = LogManager.getLogger(Common.class);
 
-	public static final String testConnectionUrl = "jdbc:hsqldb:mem:testdb";
-	// For debugging, use this instead to write DB to disk for examination:
-	// public static final String testConnectionUrl = "jdbc:hsqldb:file:testdb/blockchain;create=true";
-
 	public static final String testSettingsFilename = "test-settings-v2.json";
 
 	static {
@@ -188,7 +184,7 @@ public class Common {
 
 	@BeforeClass
 	public static void setRepository() throws DataException {
-		RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(testConnectionUrl);
+		RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(null);
 		RepositoryManager.setRepositoryFactory(repositoryFactory);
 	}
 

@@ -7,7 +7,6 @@ import org.bitcoinj.core.Base58;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.qortal.block.BlockChain;
-import org.qortal.controller.Controller;
 import org.qortal.data.account.RewardShareData;
 import org.qortal.gui.Gui;
 import org.qortal.repository.DataException;
@@ -65,7 +64,7 @@ public class DecodeOnlineAccounts {
 		}
 
 		try {
-			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Controller.getRepositoryUrl());
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Settings.getInstance().getRepositoryPath());
 			RepositoryManager.setRepositoryFactory(repositoryFactory);
 		} catch (DataException e) {
 			System.err.println("Couldn't connect to repository: " + e.getMessage());

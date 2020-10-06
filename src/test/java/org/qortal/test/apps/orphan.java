@@ -3,7 +3,6 @@ import java.security.Security;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.qortal.block.BlockChain;
-import org.qortal.controller.Controller;
 import org.qortal.repository.DataException;
 import org.qortal.repository.RepositoryFactory;
 import org.qortal.repository.RepositoryManager;
@@ -32,7 +31,7 @@ public class orphan {
 		int targetHeight = Integer.parseInt(args[argIndex]);
 
 		try {
-			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Controller.getRepositoryUrl());
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(Settings.getInstance().getRepositoryPath());
 			RepositoryManager.setRepositoryFactory(repositoryFactory);
 		} catch (DataException e) {
 			System.err.println("Couldn't connect to repository: " + e.getMessage());
