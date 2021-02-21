@@ -46,8 +46,10 @@ public class Settings {
 	// General
 	private String localeLang = Locale.getDefault().getLanguage();
 
-	// Common to all networking (API/P2P)
-	private String bindAddress = "::"; // Use IPv6 wildcard to listen on all local addresses
+	// Common to all networking (API/P2P). They are tried in order until one successfully binds.
+	private String[] bindAddresses = new String[] {
+			"::", "0.0.0.0"
+	};
 
 	// UI servers
 	private int uiPort = 12388;
@@ -376,8 +378,8 @@ public class Settings {
 		return this.isTestNet ? TESTNET_LISTEN_PORT : MAINNET_LISTEN_PORT;
 	}
 
-	public String getBindAddress() {
-		return this.bindAddress;
+	public String[] getBindAddresses() {
+		return this.bindAddresses;
 	}
 
 	public int getMinBlockchainPeers() {

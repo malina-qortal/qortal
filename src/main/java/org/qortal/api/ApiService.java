@@ -46,6 +46,7 @@ import org.qortal.api.websocket.ChatMessagesWebSocket;
 import org.qortal.api.websocket.PresenceWebSocket;
 import org.qortal.api.websocket.TradeBotWebSocket;
 import org.qortal.api.websocket.TradeOffersWebSocket;
+import org.qortal.network.Network;
 import org.qortal.settings.Settings;
 
 public class ApiService {
@@ -118,13 +119,13 @@ public class ApiService {
 				ServerConnector portUnifiedConnector = new ServerConnector(this.server,
 						new DetectorConnectionFactory(sslConnectionFactory),
 						httpConnectionFactory);
-				portUnifiedConnector.setHost(Settings.getInstance().getBindAddress());
+				portUnifiedConnector.setHost(Network.getInstance().getBindAddress());
 				portUnifiedConnector.setPort(Settings.getInstance().getApiPort());
 
 				this.server.addConnector(portUnifiedConnector);
 			} else {
 				// Non-SSL
-				InetAddress bindAddr = InetAddress.getByName(Settings.getInstance().getBindAddress());
+				InetAddress bindAddr = InetAddress.getByName(Network.getInstance().getBindAddress());
 				InetSocketAddress endpoint = new InetSocketAddress(bindAddr, Settings.getInstance().getApiPort());
 				this.server = new Server(endpoint);
 			}

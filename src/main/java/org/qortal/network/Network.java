@@ -108,6 +108,8 @@ public class Network {
 	private ServerSocketChannel serverChannel;
 	private Iterator<SelectionKey> channelIterator = null;
 
+	private String bindAddress = null;
+
 	// volatile because value is updated inside any one of the EPC threads
 	private volatile long nextConnectTaskTimestamp = 0L; // ms - try first connect once NTP syncs
 
@@ -138,25 +140,42 @@ public class Network {
 		// Grab P2P port from settings
 		int listenPort = Settings.getInstance().getListenPort();
 
-		// Grab P2P bind address from settings
-		try {
-			InetAddress bindAddr = InetAddress.getByName(Settings.getInstance().getBindAddress());
-			InetSocketAddress endpoint = new InetSocketAddress(bindAddr, listenPort);
+		// Grab P2P bind addresses from settings
+		String[] bindAddresses = Settings.getInstance().getBindAddresses();
+		for (int i=0; i<bindAddresses.length; i++) {
 
-			channelSelector = Selector.open();
+			String bindAddress = bindAddresses[i];
 
-			// Set up listen socket
-			serverChannel = ServerSocketChannel.open();
-			serverChannel.configureBlocking(false);
-			serverChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
-			serverChannel.bind(endpoint, LISTEN_BACKLOG);
-			serverChannel.register(channelSelector, SelectionKey.OP_ACCEPT);
-		} catch (UnknownHostException e) {
-			LOGGER.error(String.format("Can't bind listen socket to address %s", Settings.getInstance().getBindAddress()));
-			throw new IOException("Can't bind listen socket to address", e);
-		} catch (IOException e) {
-			LOGGER.error(String.format("Can't create listen socket: %s", e.getMessage()));
-			throw new IOException("Can't create listen socket", e);
+			try {
+				LOGGER.info(String.format("Binding to address %s", bindAddress));
+
+				InetAddress bindAddr = InetAddress.getByName(bindAddress);
+				InetSocketAddress endpoint = new InetSocketAddress(bindAddr, listenPort);
+
+				channelSelector = Selector.open();
+
+				// Set up listen socket
+				serverChannel = ServerSocketChannel.open();
+				serverChannel.configureBlocking(false);
+				serverChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
+				serverChannel.bind(endpoint, LISTEN_BACKLOG);
+				serverChannel.register(channelSelector, SelectionKey.OP_ACCEPT);
+				
+				this.bindAddress = bindAddress; // Store the selected address, so that it can be used by other parts of the app
+				break; // We don't want to bind to more than one address
+
+			} catch (UnknownHostException e) {
+				LOGGER.error(String.format("Can't bind listen socket to address %s", bindAddress));
+				if (i == bindAddresses.length-1) { // Only throw an exception if all addresses have been tried
+					throw new IOException("Can't bind listen socket to address", e);
+				}
+			} catch (IOException e) {
+				LOGGER.error(String.format("Can't create listen socket: %s", e.getMessage()));
+				if (i == bindAddresses.length-1) { // Only throw an exception if all addresses have been tried
+					throw new IOException("Can't create listen socket", e);
+				}
+			}
+
 		}
 
 		// Load all known peers from repository
@@ -177,6 +196,10 @@ public class Network {
 			instance = new Network();
 
 		return instance;
+	}
+
+	public String getBindAddress() {
+		return this.bindAddress;
 	}
 
 	public byte[] getMessageMagic() {
