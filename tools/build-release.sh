@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Change this to where AdvancedInstaller outputs built EXE installers
-WINDOWS_INSTALLER_DIR=/home/transfer/Qortal/Qortal-SetupFiles
+SCRIPT_DIR=$(dirname $(realpath "$0"))
+WINDOWS_INSTALLER_DIR="${SCRIPT_DIR}/../WindowsInstaller/Qortal-SetupFiles"
 
 set -e
 shopt -s expand_aliases
@@ -16,6 +17,16 @@ saved_pwd=$PWD
 
 alias SHA256='(sha256 -q || sha256sum | cut -d" " -f1) 2>/dev/null'
 
+function 3hash {
+  local zip_src=$1
+  local md5hash=$(md5 ${zip_src} | awk '{ print $NF }')
+  local sha1hash=$(shasum ${zip_src} | awk '{ print $1 }')
+  local sha256hash=$(sha256sum ${zip_src} | awk '{ print $1 }')
+  echo "\`MD5: ${md5hash}\`"
+  echo "\`SHA1: ${sha1hash}\`"
+  echo "\`SHA256: ${sha256hash}\`"
+}
+
 # Check we are within a git repo
 git_dir=$( git rev-parse --show-toplevel )
 if [ -z "${git_dir}" ]; then
@@ -27,7 +38,7 @@ fi
 cd ${git_dir}
 
 # Check we are in 'master' branch
-# branch_name=$( git symbolic-ref -q HEAD )
+# branch_name=$( git symbolic-ref -q HEAD ) || echo "Cannot determine branch name" && exit 1
 # branch_name=${branch_name##refs/heads/}
 # if [ "${branch_name}" != "master" ]; then
 	# echo "Unexpected current branch '${branch_name}' - expecting 'master'"
@@ -56,7 +67,7 @@ git_url=https://github.com/${git_url##*:}
 git_url=${git_url%%.git}
 
 # Check for EXE
-exe=${project^}-${git_tag#v}.exe
+exe=${project}-${git_tag#v}.exe
 exe_src="${WINDOWS_INSTALLER_DIR}/${exe}"
 if [ ! -r "${exe_src}" ]; then
 	echo "Cannot find EXE installer at ${exe_src}"

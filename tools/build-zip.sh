@@ -21,13 +21,13 @@ fi
 cd ${git_dir}
 
 # Check we are in 'master' branch
-branch_name=$( git symbolic-ref -q HEAD )
-branch_name=${branch_name##refs/heads/}
-echo "Current git branch: ${branch_name}"
-if [ "${branch_name}" != "master" ]; then
-	echo "Unexpected current branch '${branch_name}' - expecting 'master'"
-	exit 1
-fi
+# branch_name=$( git symbolic-ref -q HEAD ) || echo "Cannot determine branch name" && exit 1
+# branch_name=${branch_name##refs/heads/}
+# echo "Current git branch: ${branch_name}"
+# if [ "${branch_name}" != "master" ]; then
+# 	echo "Unexpected current branch '${branch_name}' - expecting 'master'"
+# 	exit 1
+# fi
 
 # Determine project name
 project=$( perl -n -e 'if (m/<artifactId>(\w+)<.artifactId>/) { print $1; exit }' pom.xml $)
@@ -60,7 +60,7 @@ git show HEAD:stop.sh > ${build_dir}/stop.sh
 
 printf "{\n}\n" > ${build_dir}/settings.json
 
-touch -d ${commit_ts%%+??:??} ${build_dir} ${build_dir}/*
+gtouch -d ${commit_ts%%+??:??} ${build_dir} ${build_dir}/*
 
 rm -f ${saved_pwd}/${project}.zip
 (cd ${build_dir}/..; 7z a -r -tzip ${saved_pwd}/${project}-${git_tag#v}.zip ${project}/)

@@ -12,7 +12,7 @@ configured paths, or create a dummy `D:` drive with the expected layout.
 
 Typical build procedure:
 
-* Overwrite the `qortal.jar` file in `Install-Files\`
+* Place the `qortal.jar` file in `Install-Files\`
 * Open AdvancedInstaller with qortal.aip file
 * If releasing a new version, change version number in:
 	+ "Product Information" side menu

@@ -21,7 +21,7 @@
 /qortal.iml
 .DS_Store
 /src/main/resources/resources
-/src/main/resources/log*.properties
 /*.jar
 /run.pid
 /run.log
+/WindowsInstaller/Install Files/qortal.jar

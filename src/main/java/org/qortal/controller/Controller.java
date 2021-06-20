@@ -738,6 +738,7 @@ public class Controller extends Thread {
 				hasStatusChanged = true;
 			}
 		}
+		peer.setSyncInProgress(true);
 
 		if (hasStatusChanged)
 			updateSysTray();
@@ -817,6 +818,7 @@ public class Controller extends Thread {
 			return syncResult;
 		} finally {
 			isSynchronizing = false;
+			peer.setSyncInProgress(false);
 		}
 	}
 

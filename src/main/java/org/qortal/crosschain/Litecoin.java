@@ -51,7 +51,10 @@ public class Litecoin extends Bitcoiny {
 						new Server("ltc.rentonisk.com", Server.ConnectionType.TCP, 50001),
 						new Server("ltc.rentonisk.com", Server.ConnectionType.SSL, 50002),
 						new Server("electrum-ltc.petrkr.net", Server.ConnectionType.SSL, 60002),
-						new Server("ltc.litepay.ch", Server.ConnectionType.SSL, 50022));
+						new Server("ltc.litepay.ch", Server.ConnectionType.SSL, 50022),
+						new Server("electrum-ltc-bysh.me", Server.ConnectionType.TCP, 50002),
+						new Server("electrum.jochen-hoenicke.de", Server.ConnectionType.TCP, 50005),
+						new Server("node.ispol.sk", Server.ConnectionType.TCP, 50004));
 			}
 
 			@Override

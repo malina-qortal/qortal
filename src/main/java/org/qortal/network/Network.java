@@ -72,13 +72,16 @@ public class Network {
     private static final String[] INITIAL_PEERS = new String[]{
             "node1.qortal.org", "node2.qortal.org", "node3.qortal.org", "node4.qortal.org", "node5.qortal.org",
             "node6.qortal.org", "node7.qortal.org", "node8.qortal.org", "node9.qortal.org", "node10.qortal.org",
-            "node.qortal.ru", "node2.qortal.ru", "node3.qortal.ru", "node.qortal.uk"
+            "node.qortal.ru", "node2.qortal.ru", "node3.qortal.ru", "node.qortal.uk", "node22.qortal.org",
+            "cinfu1.crowetic.com", "node.cwd.systems"
     };
 
     private static final long NETWORK_EPC_KEEPALIVE = 10L; // seconds
 
     public static final int MAX_SIGNATURES_PER_REPLY = 500;
     public static final int MAX_BLOCK_SUMMARIES_PER_REPLY = 500;
+
+    private static final long DISCONNECTION_CHECK_INTERVAL = 10 * 1000L; // milliseconds
 
     // Generate our node keys / ID
     private final Ed25519PrivateKeyParameters edPrivateKeyParams = new Ed25519PrivateKeyParameters(new SecureRandom());
@@ -88,6 +91,8 @@ public class Network {
     private final int maxMessageSize;
     private final int minOutboundPeers;
     private final int maxPeers;
+
+    private long nextDisconnectionCheck = 0L;
 
     private final List<PeerData> allKnownPeers = new ArrayList<>();
     private final List<Peer> connectedPeers = new ArrayList<>();
@@ -611,6 +616,8 @@ public class Network {
                 // Don't consider already connected peers (resolved address match)
                 // XXX This might be too slow if we end up waiting a long time for hostnames to resolve via DNS
                 peers.removeIf(isResolvedAsConnectedPeer);
+
+                this.checkLongestConnection(now);
             }
 
             // Any left?
@@ -666,6 +673,29 @@ public class Network {
         }
 
         return null;
+    }
+
+    private void checkLongestConnection(Long now) {
+        if (now == null || now < nextDisconnectionCheck) {
+            return;
+        }
+
+        // Find peers that have reached their maximum connection age, and disconnect them
+        List<Peer> peersToDisconnect = this.connectedPeers.stream()
+                .filter(peer -> !peer.isSyncInProgress())
+                .filter(peer -> peer.hasReachedMaxConnectionAge())
+                .collect(Collectors.toList());
+
+        if (peersToDisconnect != null && peersToDisconnect.size() > 0) {
+            for (Peer peer : peersToDisconnect) {
+                LOGGER.info("Forcing disconnection of peer {} because connection age ({} ms) " +
+                        "has reached the maximum ({} ms)", peer, peer.getConnectionAge(), peer.getMaxConnectionAge());
+                peer.disconnect("Connection age too old");
+            }
+        }
+
+        // Check again after a minimum fixed interval
+        nextDisconnectionCheck = now + DISCONNECTION_CHECK_INTERVAL;
     }
 
     // Peer callbacks

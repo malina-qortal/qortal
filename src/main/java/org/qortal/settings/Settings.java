@@ -133,6 +133,11 @@ public class Settings {
 	 * If false, sync will be blocked both ways, and they will not appear in the peers list */
 	private boolean allowConnectionsWithOlderPeerVersions = true;
 
+	/** Minimum time (in seconds) that we should attempt to remain connected to a peer for */
+	private int minPeerConnectionTime = 2 * 60; // seconds
+	/** Maximum time (in seconds) that we should attempt to remain connected to a peer for */
+	private int maxPeerConnectionTime = 20 * 60; // seconds
+
 	/** Whether to sync multiple blocks at once in normal operation */
 	private boolean fastSyncEnabled = true;
 	/** Whether to sync multiple blocks at once when the peer has a different chain */
@@ -435,6 +440,10 @@ public class Settings {
 	public String getMinPeerVersion() { return this.minPeerVersion; }
 
 	public boolean getAllowConnectionsWithOlderPeerVersions() { return this.allowConnectionsWithOlderPeerVersions; }
+
+	public int getMinPeerConnectionTime() { return this.minPeerConnectionTime; }
+
+	public int getMaxPeerConnectionTime() { return this.maxPeerConnectionTime; }
 
 	public String getBlockchainConfig() {
 		return this.blockchainConfig;
