@@ -6,6 +6,7 @@ import java.util.List;
 import org.qortal.account.Account;
 import org.qortal.account.PublicKeyAccount;
 import org.qortal.asset.Asset;
+import org.qortal.chat.ChatDuplicateMessageFilter;
 import org.qortal.chat.ChatRateLimiter;
 import org.qortal.crypto.Crypto;
 import org.qortal.crypto.MemoryPoW;
@@ -19,6 +20,7 @@ import org.qortal.repository.Repository;
 import org.qortal.transform.TransformationException;
 import org.qortal.transform.transaction.ChatTransactionTransformer;
 import org.qortal.transform.transaction.TransactionTransformer;
+import org.qortal.utils.Base58;
 
 public class ChatTransaction extends Transaction {
 
@@ -165,6 +167,14 @@ public class ChatTransaction extends Transaction {
 		rateLimiter.addMessage(chatTransactionData.getSender(), chatTransactionData.getTimestamp());
 		if (rateLimiter.isAddressAboveRateLimit(chatTransactionData.getSender()))
 			return ValidationResult.ADDRESS_ABOVE_RATE_LIMIT;
+
+		// Check for duplicate messages (unencrypted text messages only)
+		if (!chatTransactionData.getIsEncrypted() && chatTransactionData.getIsText()) {
+			ChatDuplicateMessageFilter duplicateFilter = ChatDuplicateMessageFilter.getInstance();
+			String message58 = Base58.encode(chatTransactionData.getData());
+			if (duplicateFilter.isDuplicateMessage(chatTransactionData.getSender(), message58))
+				return ValidationResult.DUPLICATE_MESSAGE;
+		}
 
 		return ValidationResult.OK;
 	}
