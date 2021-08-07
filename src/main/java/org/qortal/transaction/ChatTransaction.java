@@ -6,6 +6,7 @@ import java.util.List;
 import org.qortal.account.Account;
 import org.qortal.account.PublicKeyAccount;
 import org.qortal.asset.Asset;
+import org.qortal.chat.ChatRateLimiter;
 import org.qortal.crypto.Crypto;
 import org.qortal.crypto.MemoryPoW;
 import org.qortal.data.transaction.ChatTransactionData;
@@ -158,6 +159,12 @@ public class ChatTransaction extends Transaction {
 		// Check data length
 		if (chatTransactionData.getData().length < 1 || chatTransactionData.getData().length > MAX_DATA_SIZE)
 			return ValidationResult.INVALID_DATA_LENGTH;
+
+		// Check rate limit
+		ChatRateLimiter rateLimiter = ChatRateLimiter.getInstance();
+		rateLimiter.addMessage(chatTransactionData.getSender(), chatTransactionData.getTimestamp());
+		if (rateLimiter.isAddressAboveRateLimit(chatTransactionData.getSender()))
+			return ValidationResult.ADDRESS_ABOVE_RATE_LIMIT;
 
 		return ValidationResult.OK;
 	}

@@ -164,6 +164,12 @@ public class Settings {
 	// Lists
 	private String listsPath = "lists";
 
+	// Chat rate limit
+	/** Limit to 20 messages per address... */
+	private int chatRateLimitCount = 25;
+	/** ...per 5 minutes of time that passes */
+	private int chatRateLimitSeconds = 5 * 60;
+
 	/** Array of NTP server hostnames. */
 	private String[] ntpServers = new String[] {
 		"pool.ntp.org",
@@ -479,6 +485,14 @@ public class Settings {
 
 	public String getListsPath() {
 		return this.listsPath;
+	}
+
+	public int getChatRateLimitCount() {
+		return this.chatRateLimitCount;
+	}
+
+	public int getChatRateLimitSeconds() {
+		return this.chatRateLimitSeconds;
 	}
 
 	public String[] getNtpServers() {
