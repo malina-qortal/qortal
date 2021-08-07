@@ -28,7 +28,7 @@ import org.qortal.asset.Asset;
 import org.qortal.at.AT;
 import org.qortal.block.BlockChain.BlockTimingByHeight;
 import org.qortal.block.BlockChain.AccountLevelShareBin;
-import org.qortal.controller.Controller;
+import org.qortal.controller.OnlineAccountsManager;
 import org.qortal.crypto.Crypto;
 import org.qortal.data.account.AccountBalanceData;
 import org.qortal.data.account.AccountData;
@@ -320,7 +320,7 @@ public class Block {
 		byte[] reference = parentBlockData.getSignature();
 
 		// Fetch our list of online accounts
-		List<OnlineAccountData> onlineAccounts = Controller.getInstance().getOnlineAccounts();
+		List<OnlineAccountData> onlineAccounts = OnlineAccountsManager.getInstance().getOnlineAccounts();
 		if (onlineAccounts.isEmpty()) {
 			LOGGER.error("No online accounts - not even our own?");
 			return null;
@@ -976,10 +976,10 @@ public class Block {
 		byte[] onlineTimestampBytes = Longs.toByteArray(onlineTimestamp);
 
 		// If this block is much older than current online timestamp, then there's no point checking current online accounts
-		List<OnlineAccountData> currentOnlineAccounts = onlineTimestamp < NTP.getTime() - Controller.ONLINE_TIMESTAMP_MODULUS
+		List<OnlineAccountData> currentOnlineAccounts = onlineTimestamp < NTP.getTime() - OnlineAccountsManager.ONLINE_TIMESTAMP_MODULUS
 				? null
-				: Controller.getInstance().getOnlineAccounts();
-		List<OnlineAccountData> latestBlocksOnlineAccounts = Controller.getInstance().getLatestBlocksOnlineAccounts();
+				: OnlineAccountsManager.getInstance().getOnlineAccounts();
+		List<OnlineAccountData> latestBlocksOnlineAccounts = OnlineAccountsManager.getInstance().getLatestBlocksOnlineAccounts();
 
 		// Extract online accounts' timestamp signatures from block data
 		List<byte[]> onlineAccountsSignatures = BlockTransformer.decodeTimestampSignatures(this.blockData.getOnlineAccountsSignatures());
@@ -1357,7 +1357,7 @@ public class Block {
 		postBlockTidy();
 
 		// Give Controller our cached, valid online accounts data (if any) to help reduce CPU load for next block
-		Controller.getInstance().pushLatestBlocksOnlineAccounts(this.cachedValidOnlineAccounts);
+		OnlineAccountsManager.getInstance().pushLatestBlocksOnlineAccounts(this.cachedValidOnlineAccounts);
 
 		// Log some debugging info relating to the block weight calculation
 		this.logDebugInfo();
@@ -1575,8 +1575,8 @@ public class Block {
 
 		postBlockTidy();
 
-		// Remove any cached, valid online accounts data from Controller
-		Controller.getInstance().popLatestBlocksOnlineAccounts();
+		// Remove any cached, valid online accounts data from OnlineAccountsManager
+		OnlineAccountsManager.getInstance().popLatestBlocksOnlineAccounts();
 	}
 
 	protected void orphanTransactionsFromBlock() throws DataException {

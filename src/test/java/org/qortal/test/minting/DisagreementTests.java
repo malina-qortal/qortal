@@ -11,7 +11,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.qortal.account.PrivateKeyAccount;
 import org.qortal.controller.BlockMinter;
-import org.qortal.controller.Controller;
+import org.qortal.controller.OnlineAccountsManager;
 import org.qortal.data.account.RewardShareData;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.transaction.TransactionData;
@@ -73,7 +73,7 @@ public class DisagreementTests extends Common {
 			assertNotNull(testRewardShareData);
 
 			// Create signed timestamps
-			Controller.getInstance().ensureTestingAccountsOnline(mintingAccount, testRewardShareAccount);
+			OnlineAccountsManager.getInstance().ensureTestingAccountsOnline(mintingAccount, testRewardShareAccount);
 
 			// Mint another block
 			BlockMinter.mintTestingBlockRetainingTimestamps(repository, mintingAccount);
