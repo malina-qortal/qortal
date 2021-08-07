@@ -138,7 +138,7 @@ public class OnlineAccountsManager {
                 this.onlineAccounts.add(ourOnlineAccountData);
             }
 
-            LOGGER.trace(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
+            LOGGER.debug(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
             ourOnlineAccounts.add(ourOnlineAccountData);
             hasInfoChanged = true;
         }
@@ -149,7 +149,7 @@ public class OnlineAccountsManager {
         Message message = new OnlineAccountsMessage(ourOnlineAccounts);
         Network.getInstance().broadcast(peer -> message);
 
-        LOGGER.trace(()-> String.format("Broadcasted %d online account%s with timestamp %d", ourOnlineAccounts.size(), (ourOnlineAccounts.size() != 1 ? "s" : ""), onlineAccountsTimestamp));
+        LOGGER.debug(()-> String.format("Broadcasted %d online account%s with timestamp %d", ourOnlineAccounts.size(), (ourOnlineAccounts.size() != 1 ? "s" : ""), onlineAccountsTimestamp));
     }
 
     private void performOnlineAccountsTasks() {
@@ -279,7 +279,7 @@ public class OnlineAccountsManager {
                     return;
                 }
             } else {
-                LOGGER.trace(() -> String.format("Added online account %s with timestamp %d", otherAccount.getAddress(), onlineAccountData.getTimestamp()));
+                LOGGER.debug(() -> String.format("Added online account %s with timestamp %d", otherAccount.getAddress(), onlineAccountData.getTimestamp()));
             }
 
             this.onlineAccounts.add(onlineAccountData);
@@ -347,14 +347,14 @@ public class OnlineAccountsManager {
         Message onlineAccountsMessage = new OnlineAccountsMessage(accountsToSend);
         peer.sendMessage(onlineAccountsMessage);
 
-        LOGGER.trace(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
+        LOGGER.debug(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
     }
 
     public void onNetworkOnlineAccountsMessage(Peer peer, Message message) {
         OnlineAccountsMessage onlineAccountsMessage = (OnlineAccountsMessage) message;
 
         List<OnlineAccountData> peersOnlineAccounts = onlineAccountsMessage.getOnlineAccounts();
-        LOGGER.trace(() -> String.format("Received %d online accounts from %s", peersOnlineAccounts.size(), peer));
+        LOGGER.debug(() -> String.format("Received %d online accounts from %s", peersOnlineAccounts.size(), peer));
 
         try (final Repository repository = RepositoryManager.getRepository()) {
             for (OnlineAccountData onlineAccountData : peersOnlineAccounts)
