@@ -172,7 +172,7 @@ public class ChatTransaction extends Transaction {
 		if (!chatTransactionData.getIsEncrypted() && chatTransactionData.getIsText()) {
 			ChatDuplicateMessageFilter duplicateFilter = ChatDuplicateMessageFilter.getInstance();
 			String message58 = Base58.encode(chatTransactionData.getData());
-			if (duplicateFilter.isDuplicateMessage(chatTransactionData.getSender(), message58))
+			if (duplicateFilter.isDuplicateMessage(chatTransactionData.getSender(), chatTransactionData.getTimestamp(), message58))
 				return ValidationResult.DUPLICATE_MESSAGE;
 		}
 
