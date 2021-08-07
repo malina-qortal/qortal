@@ -33,7 +33,7 @@ import org.qortal.api.Security;
 import org.qortal.api.model.ApiOnlineAccount;
 import org.qortal.api.model.RewardShareKeyRequest;
 import org.qortal.asset.Asset;
-import org.qortal.controller.Controller;
+import org.qortal.controller.OnlineAccountsManager;
 import org.qortal.crypto.Crypto;
 import org.qortal.data.account.AccountData;
 import org.qortal.data.account.RewardShareData;
@@ -158,7 +158,7 @@ public class AddressesResource {
 	)
 	@ApiErrors({ApiError.PUBLIC_KEY_NOT_FOUND, ApiError.REPOSITORY_ISSUE})
 	public List<ApiOnlineAccount> getOnlineAccounts() {
-		List<OnlineAccountData> onlineAccounts = Controller.getInstance().getOnlineAccounts();
+		List<OnlineAccountData> onlineAccounts = OnlineAccountsManager.getInstance().getOnlineAccounts();
 
 		// Map OnlineAccountData entries to OnlineAccount via reward-share data
 		try (final Repository repository = RepositoryManager.getRepository()) {

@@ -8,7 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.qortal.account.PrivateKeyAccount;
 import org.qortal.controller.BlockMinter;
-import org.qortal.controller.Controller;
+import org.qortal.controller.OnlineAccountsManager;
 import org.qortal.data.account.RewardShareData;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
@@ -77,7 +77,7 @@ public class BlocksMintedCountTests extends Common {
 			assertNotNull(testRewardShareData);
 
 			// Create signed timestamps
-			Controller.getInstance().ensureTestingAccountsOnline(mintingAccount, testRewardShareAccount);
+			OnlineAccountsManager.getInstance().ensureTestingAccountsOnline(mintingAccount, testRewardShareAccount);
 
 			// Even though Alice features in two online reward-shares, she should only gain +1 blocksMinted
 			// Bob only features in one online reward-share, so should also only gain +1 blocksMinted
@@ -87,7 +87,7 @@ public class BlocksMintedCountTests extends Common {
 
 	private void testRewardShare(Repository repository, PrivateKeyAccount testRewardShareAccount, int aliceDelta, int bobDelta) throws DataException {
 		// Create signed timestamps
-		Controller.getInstance().ensureTestingAccountsOnline(testRewardShareAccount);
+		OnlineAccountsManager.getInstance().ensureTestingAccountsOnline(testRewardShareAccount);
 
 		testRewardShareRetainingTimestamps(repository, testRewardShareAccount, aliceDelta, bobDelta);
 	}
