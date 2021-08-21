@@ -863,7 +863,26 @@ public class HSQLDBDatabaseUpdates {
 				}
 
 				default:
-					// nothing to do
+
+					// Check if we already have an ATStatesHeight index
+					ResultSet indexResultSet = stmt.executeQuery("SELECT INDEX_NAME FROM INFORMATION_SCHEMA.SYSTEM_INDEXINFO where INDEX_NAME='ATSTATESHEIGHTINDEX'");
+					final boolean hasHeightIndex = indexResultSet.next();
+					if (!hasHeightIndex) {
+						// We need to add the missing height index (as some nodes originally reshaped without it in case 34)
+
+						LOGGER.info("Rebuilding AT states height index in repository - this will take a very long time...");
+						LOGGER.info("No progress indicator is available, so please check back every few hours.");
+						stmt.execute("CREATE INDEX ATStatesHeightIndex ON ATStates (height)");
+						stmt.execute("CHECKPOINT");
+
+					}
+
+					// Make sure to return false, as we don't want to increase the database version.
+					// This is a throwaway build to add the index on nodes with enough CPU to do so.
+					// We may ulimately include this addition in a release build, as its own official case,
+					// but it takes too long right now for us to justify including this in a mainline release.
+					// Once we have "top-only-sync" and have been able to get the archived data out of the
+					// db, this will become more achievable for the regular user.
 					return false;
 			}
 		}
