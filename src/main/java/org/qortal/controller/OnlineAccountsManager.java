@@ -7,6 +7,7 @@ import org.qortal.account.Account;
 import org.qortal.account.PrivateKeyAccount;
 import org.qortal.account.PublicKeyAccount;
 import org.qortal.block.BlockChain;
+import org.qortal.crypto.MemoryPoW;
 import org.qortal.data.account.MintingAccountData;
 import org.qortal.data.account.RewardShareData;
 import org.qortal.data.network.OnlineAccountData;
@@ -24,11 +25,13 @@ import org.qortal.utils.NTP;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class OnlineAccountsManager {
+public class OnlineAccountsManager extends Thread {
 
     private static final Logger LOGGER = LogManager.getLogger(OnlineAccountsManager.class);
 
     private static OnlineAccountsManager instance;
+
+    private volatile boolean isStopping = false;
 
     // To do with online accounts list
     private static final long ONLINE_ACCOUNTS_TASKS_INTERVAL = 10 * 1000L; // ms
@@ -37,6 +40,8 @@ public class OnlineAccountsManager {
     private static final long LAST_SEEN_EXPIRY_PERIOD = (ONLINE_TIMESTAMP_MODULUS * 2) + (1 * 60 * 1000L);
     /** How many (latest) blocks' worth of online accounts we cache */
     private static final int MAX_BLOCKS_CACHED_ONLINE_ACCOUNTS = 2;
+
+    public static final int POW_BUFFER_SIZE = 8 * 1024 * 1024; // bytes
 
     private long onlineAccountsTasksTimestamp = Controller.startTime + ONLINE_ACCOUNTS_TASKS_INTERVAL; // ms
 
@@ -56,6 +61,36 @@ public class OnlineAccountsManager {
 
         return instance;
     }
+
+    @Override
+    public void run() {
+        Thread.currentThread().setName("Online Accounts Manager");
+
+        try {
+            while (!isStopping) {
+                Thread.sleep(2000);
+
+                int difficulty = 15;
+                long timestamp = System.currentTimeMillis();
+
+                LOGGER.info("Computing nonce at difficulty {} for timestamp {}...", difficulty, timestamp);
+
+                byte[] bytes = Longs.toByteArray(timestamp);
+                Integer nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, difficulty);
+
+                LOGGER.info("Computed nonce: {}. Time taken: {} ms", nonce, (System.currentTimeMillis() - timestamp));
+            }
+
+        } catch (InterruptedException e) {
+            // Fall-through to exit thread...
+        }
+    }
+
+    public void shutdown() {
+        isStopping = true;
+        this.interrupt();
+    }
+
 
 
     public void checkOnlineAccountsTasks(long now) {

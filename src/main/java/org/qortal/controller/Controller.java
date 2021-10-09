@@ -469,6 +469,10 @@ public class Controller extends Thread {
 		// LOGGER.info("Starting arbitrary-transaction data manager");
 		// ArbitraryDataManager.getInstance().start();
 
+		// Online accounts manager
+		LOGGER.info("Starting online accounts manager");
+		OnlineAccountsManager.getInstance().start();
+
 		// Auto-update service?
 		if (Settings.getInstance().isAutoUpdateEnabled()) {
 			LOGGER.info("Starting auto-update");
@@ -1027,6 +1031,10 @@ public class Controller extends Thread {
 				// Arbitrary transaction data manager
 				// LOGGER.info("Shutting down arbitrary-transaction data manager");
 				// ArbitraryDataManager.getInstance().shutdown();
+
+				// Online accounts manager
+				 LOGGER.info("Shutting down online accounts manager");
+				 OnlineAccountsManager.getInstance().shutdown();
 
 				if (blockMinter != null) {
 					LOGGER.info("Shutting down block minter");
