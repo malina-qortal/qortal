@@ -1,5 +1,7 @@
 package org.qortal.crypto;
 
+import org.qortal.controller.Controller;
+
 import java.nio.ByteBuffer;
 
 public class MemoryPoW {
@@ -31,6 +33,10 @@ public class MemoryPoW {
 
 			// If we've been interrupted, exit fast with invalid value
 			if (Thread.currentThread().isInterrupted())
+				return -1;
+
+			// Or, if the Controller is stopping, do the same
+			if (Controller.isStopping())
 				return -1;
 
 			seed *= seedMultiplier; // per nonce
