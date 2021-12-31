@@ -77,8 +77,10 @@ public class OnlineAccountsManager extends Thread {
 
                 byte[] bytes = Longs.toByteArray(timestamp);
                 Integer nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, difficulty);
+                long totalTime = System.currentTimeMillis() - timestamp;
+                double hashRate = nonce / (double)totalTime * 1000.0f;
 
-                LOGGER.info("Computed nonce: {}. Time taken: {} ms", nonce, (System.currentTimeMillis() - timestamp));
+                LOGGER.info("Computed nonce: {}. Time taken: {} ms. Hashrate: {}", nonce, totalTime, hashRate);
             }
 
         } catch (InterruptedException e) {
