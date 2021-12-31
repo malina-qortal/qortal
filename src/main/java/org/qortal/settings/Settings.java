@@ -149,6 +149,10 @@ public class Settings {
 	private boolean bootstrap = true;
 
 
+	/** Registered names integrity check */
+	private boolean namesIntegrityCheckEnabled = false;
+
+
 	// Peer-to-peer related
 	private boolean isTestNet = false;
 	/** Port number for inbound peer-to-peer connections. */
@@ -637,6 +641,10 @@ public class Settings {
 
 	public int getBlockPruneBatchSize() {
 		return this.blockPruneBatchSize;
+	}
+
+	public boolean isNamesIntegrityCheckEnabled() {
+		return this.namesIntegrityCheckEnabled;
 	}
 
 

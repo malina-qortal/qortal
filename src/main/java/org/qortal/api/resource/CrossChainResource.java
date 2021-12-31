@@ -1,5 +1,6 @@
 package org.qortal.api.resource;
 
+import com.google.common.primitives.Longs;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -10,12 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.function.Supplier;
 
 import javax.servlet.http.HttpServletRequest;
@@ -95,7 +91,7 @@ public class CrossChainResource {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
 
 		final boolean isExecutable = true;
-		List<CrossChainTradeData> crossChainTradesData = new ArrayList<>();
+		List<CrossChainTradeData> crossChainTrades = new ArrayList<>();
 
 		try (final Repository repository = RepositoryManager.getRepository()) {
 			Map<ByteArray, Supplier<ACCT>> acctsByCodeHash = SupportedBlockchain.getFilteredAcctMap(foreignBlockchain);
@@ -108,11 +104,27 @@ public class CrossChainResource {
 
 				for (ATData atData : atsData) {
 					CrossChainTradeData crossChainTradeData = acct.populateTradeData(repository, atData);
-					crossChainTradesData.add(crossChainTradeData);
+					if (crossChainTradeData.mode == AcctMode.OFFERING) {
+						crossChainTrades.add(crossChainTradeData);
+					}
 				}
 			}
 
-			return crossChainTradesData;
+			// Sort the trades by timestamp
+			if (reverse != null && reverse) {
+				crossChainTrades.sort((a, b) -> Longs.compare(b.creationTimestamp, a.creationTimestamp));
+			}
+			else {
+				crossChainTrades.sort((a, b) -> Longs.compare(a.creationTimestamp, b.creationTimestamp));
+			}
+
+			if (limit != null && limit > 0) {
+				// Make sure to not return more than the limit
+				int upperLimit = Math.min(limit, crossChainTrades.size());
+				crossChainTrades = crossChainTrades.subList(0, upperLimit);
+			}
+
+			return crossChainTrades;
 		} catch (DataException e) {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
 		}
@@ -237,6 +249,20 @@ public class CrossChainResource {
 				}
 			}
 
+			// Sort the trades by timestamp
+			if (reverse != null && reverse) {
+				crossChainTrades.sort((a, b) -> Longs.compare(b.getTradeTimestamp(), a.getTradeTimestamp()));
+			}
+			else {
+				crossChainTrades.sort((a, b) -> Longs.compare(a.getTradeTimestamp(), b.getTradeTimestamp()));
+			}
+
+			if (limit != null && limit > 0) {
+				// Make sure to not return more than the limit
+				int upperLimit = Math.min(limit, crossChainTrades.size());
+				crossChainTrades = crossChainTrades.subList(0, upperLimit);
+			}
+
 			return crossChainTrades;
 		} catch (DataException e) {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
@@ -292,6 +318,9 @@ public class CrossChainResource {
 			long totalForeign = 0;
 			long totalQort = 0;
 
+			Map<Long, CrossChainTradeData> reverseSortedTradeData = new TreeMap<>(Collections.reverseOrder());
+
+			// Collect recent AT states for each ACCT version
 			for (Map.Entry<ByteArray, Supplier<ACCT>> acctInfo : acctsByCodeHash.entrySet()) {
 				byte[] codeHash = acctInfo.getKey().value;
 				ACCT acct = acctInfo.getValue().get();
@@ -300,10 +329,35 @@ public class CrossChainResource {
 						isFinished, acct.getModeByteOffset(), (long) AcctMode.REDEEMED.value, minimumCount, maximumCount, minimumPeriod);
 
 				for (ATStateData atState : atStates) {
+					// We also need block timestamp for use as trade timestamp
+					long timestamp = repository.getBlockRepository().getTimestampFromHeight(atState.getHeight());
+					if (timestamp == 0) {
+						// Try the archive
+						timestamp = repository.getBlockArchiveRepository().getTimestampFromHeight(atState.getHeight());
+					}
+
 					CrossChainTradeData crossChainTradeData = acct.populateTradeData(repository, atState);
-					totalForeign += crossChainTradeData.expectedForeignAmount;
-					totalQort += crossChainTradeData.qortAmount;
+					reverseSortedTradeData.put(timestamp, crossChainTradeData);
 				}
+			}
+
+			// Loop through the sorted map and calculate the average price
+			// Also remove elements beyond the maxtrades limit
+			Set set = reverseSortedTradeData.entrySet();
+			Iterator i = set.iterator();
+			int index = 0;
+			while (i.hasNext()) {
+				Map.Entry tradeDataMap = (Map.Entry)i.next();
+				CrossChainTradeData crossChainTradeData = (CrossChainTradeData) tradeDataMap.getValue();
+
+				if (maxtrades != null && index >= maxtrades) {
+					// We've reached the limit
+					break;
+				}
+
+				totalForeign += crossChainTradeData.expectedForeignAmount;
+				totalQort += crossChainTradeData.qortAmount;
+				index++;
 			}
 
 			return useInversePrice ? Amounts.scaledDivide(totalForeign, totalQort) : Amounts.scaledDivide(totalQort, totalForeign);

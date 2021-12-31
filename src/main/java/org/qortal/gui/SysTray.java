@@ -147,13 +147,13 @@ public class SysTray {
 			}
 		});
 
-		JMenuItem openUi = new JMenuItem(Translator.INSTANCE.translate("SysTray", "OPEN_UI"));
+		/* JMenuItem openUi = new JMenuItem(Translator.INSTANCE.translate("SysTray", "OPEN_UI"));
 		openUi.addActionListener(actionEvent -> {
 			destroyHiddenDialog();
 
 			new OpenUiWorker().execute();
 		});
-		menu.add(openUi);
+		menu.add(openUi); */
 
 		JMenuItem openTimeCheck = new JMenuItem(Translator.INSTANCE.translate("SysTray", "CHECK_TIME_ACCURACY"));
 		openTimeCheck.addActionListener(actionEvent -> {

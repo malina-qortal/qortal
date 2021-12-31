@@ -187,7 +187,12 @@ public class NamesDatabaseIntegrityCheck {
                         // The old name will then be unregistered, or re-registered.
                         // FUTURE: check database integrity for names that have been updated and then the original name re-registered
                         else if (Objects.equals(updateNameTransactionData.getName(), registeredName)) {
-                            NameData newNameData = repository.getNameRepository().fromName(updateNameTransactionData.getNewName());
+                            String newName = updateNameTransactionData.getNewName();
+                            if (newName == null || newName.length() == 0) {
+                                // If new name is blank (or maybe null, just to be safe), it means that it stayed the same
+                                newName = registeredName;
+                            }
+                            NameData newNameData = repository.getNameRepository().fromName(newName);
                             if (!Objects.equals(creator.getAddress(), newNameData.getOwner())) {
                                 LOGGER.info("Error: registered name {} is owned by {}, but it should be {}",
                                         updateNameTransactionData.getNewName(), newNameData.getOwner(), creator.getAddress());

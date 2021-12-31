@@ -204,6 +204,10 @@ public class BlockData implements Serializable {
 		return this.onlineAccountsSignatures;
 	}
 
+	public void setOnlineAccountsSignatures(byte[] onlineAccountsSignatures) {
+		this.onlineAccountsSignatures = onlineAccountsSignatures;
+	}
+
 	// JAXB special
 
 	@XmlElement(name = "minterAddress")

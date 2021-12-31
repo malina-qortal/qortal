@@ -40,7 +40,7 @@ public class BlockApiTests extends ApiCommon {
 			byte[] signatureBytes = GenesisBlock.getInstance(repository).getSignature();
 			String signature = Base58.encode(signatureBytes);
 
-			assertNotNull(this.blocksResource.getBlock(signature));
+			assertNotNull(this.blocksResource.getBlock(signature, true));
 		}
 	}
 
@@ -72,7 +72,7 @@ public class BlockApiTests extends ApiCommon {
 
 	@Test
 	public void testGetBlockByHeight() {
-		assertNotNull(this.blocksResource.getByHeight(1));
+		assertNotNull(this.blocksResource.getByHeight(1, true));
 	}
 
 	@Test
