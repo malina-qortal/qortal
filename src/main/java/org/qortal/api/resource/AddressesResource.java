@@ -195,7 +195,7 @@ public class AddressesResource {
 	)
 	@ApiErrors({ApiError.PUBLIC_KEY_NOT_FOUND, ApiError.REPOSITORY_ISSUE})
 	public List<OnlineAccountLevel> getOnlineAccountsByLevel() {
-		List<OnlineAccountData> onlineAccounts = Controller.getInstance().getOnlineAccounts();
+		List<OnlineAccountData> onlineAccounts = OnlineAccountsManager.getInstance().getOnlineAccounts();
 
 		try (final Repository repository = RepositoryManager.getRepository()) {
 			List<OnlineAccountLevel> onlineAccountLevels = new ArrayList<>();
