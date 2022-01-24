@@ -390,6 +390,9 @@ public class DogecoinACCTv2TradeBot implements AcctTradeBot {
 			}
 		}
 
+		// Note: for now, we aren't sending presence transactions once a trade has started,
+		// otherwise trade bots that are in a bad state can keep an offer visible in the list
+
 		switch (tradeBotState) {
 			case BOB_WAITING_FOR_AT_CONFIRM:
 				handleBobWaitingForAtConfirm(repository, tradeBotData);
@@ -401,12 +404,12 @@ public class DogecoinACCTv2TradeBot implements AcctTradeBot {
 				break;
 
 			case ALICE_WAITING_FOR_AT_LOCK:
-				TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
+				//TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
 				handleAliceWaitingForAtLock(repository, tradeBotData, atData, tradeData);
 				break;
 
 			case BOB_WAITING_FOR_AT_REDEEM:
-				TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
+				//TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
 				handleBobWaitingForAtRedeem(repository, tradeBotData, atData, tradeData);
 				break;
 
@@ -415,7 +418,7 @@ public class DogecoinACCTv2TradeBot implements AcctTradeBot {
 				break;
 
 			case ALICE_REFUNDING_A:
-				TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
+				//TradeBot.getInstance().updatePresence(repository, tradeBotData, tradeData);
 				handleAliceRefundingP2shA(repository, tradeBotData, atData, tradeData);
 				break;
 
