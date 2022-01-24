@@ -350,6 +350,7 @@ public class LitecoinACCTv2TradeBot implements AcctTradeBot {
 
 		switch (tradeBotState) {
 			case BOB_WAITING_FOR_AT_CONFIRM:
+			case BOB_WAITING_FOR_AT_REDEEM:
 			case ALICE_DONE:
 			case BOB_DONE:
 			case ALICE_REFUNDED:
