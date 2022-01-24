@@ -244,6 +244,7 @@ public class CrossChainTradeBotResource {
 	@DELETE
 	@Operation(
 		summary = "Delete completed trade",
+		description = "Use the \"tradePrivateKey\" as the request body, which can be found in the GET /crosschain/tradebot response",
 		requestBody = @RequestBody(
 			required = true,
 			content = @Content(
