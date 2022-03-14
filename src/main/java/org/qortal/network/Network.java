@@ -180,7 +180,8 @@ public class Network {
         }
 
         // Load all known peers from repository
-        synchronized (this.allKnownPeers) { List<String> fixedNetwork = Settings.getInstance().getFixedNetwork();
+        synchronized (this.allKnownPeers) {
+            List<String> fixedNetwork = Settings.getInstance().getFixedNetwork();
             if (fixedNetwork != null && !fixedNetwork.isEmpty()) {
                 Long addedWhen = NTP.getTime();
                 String addedBy = "fixedNetwork";
