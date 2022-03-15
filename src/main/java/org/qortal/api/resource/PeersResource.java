@@ -20,6 +20,11 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.qortal.api.*;
 import org.qortal.api.model.ConnectedPeer;
 import org.qortal.api.model.PeersSummary;
@@ -127,8 +132,28 @@ public class PeersResource {
 		}
 	)
 	@SecurityRequirement(name = "apiKey")
-	public ExecuteProduceConsume.StatsSnapshot getEngineStats(@HeaderParam(Security.API_KEY_HEADER) String apiKey) {
+	public ExecuteProduceConsume.StatsSnapshot getEngineStats(@HeaderParam(Security.API_KEY_HEADER) String apiKey, @QueryParam("newLoggingLevel") Level newLoggingLevel) {
 		Security.checkApiCallAllowed(request);
+
+		if (newLoggingLevel != null) {
+			final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+			final Configuration config = ctx.getConfiguration();
+
+			String epcClassName = "org.qortal.network.Network.NetworkProcessor";
+			LoggerConfig loggerConfig = config.getLoggerConfig(epcClassName);
+			LoggerConfig specificConfig = loggerConfig;
+
+			// We need a specific configuration for this logger,
+			// otherwise we would change the level of all other loggers
+			// having the original configuration as parent as well
+			if (!loggerConfig.getName().equals(epcClassName)) {
+				specificConfig = new LoggerConfig(epcClassName, newLoggingLevel, true);
+				specificConfig.setParent(loggerConfig);
+				config.addLogger(epcClassName, specificConfig);
+			}
+			specificConfig.setLevel(newLoggingLevel);
+			ctx.updateLoggers();
+		}
 
 		return Network.getInstance().getStatsSnapshot();
 	}
