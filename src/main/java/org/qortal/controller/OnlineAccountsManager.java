@@ -308,7 +308,8 @@ public class OnlineAccountsManager extends Thread {
         }
 
         // If we're not up-to-date, then there's no point in computing anything yet
-        if (!Controller.getInstance().isUpToDate()) {
+        // The exception being when we are in recovery mode, in which case we need some online accounts!
+        if (!Controller.getInstance().isUpToDate() && !Synchronizer.getInstance().getRecoveryMode()) {
             return;
         }
 
