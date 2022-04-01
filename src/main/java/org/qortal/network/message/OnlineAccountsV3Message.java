@@ -122,7 +122,7 @@ public class OnlineAccountsV3Message extends Message {
 						bytes.write(Ints.toByteArray(nonceCount));
 
 						for (int n = 0; n < nonceCount; ++n) {
-							int nonce = onlineAccountData.getNonces().get(i);
+							int nonce = onlineAccountData.getNonces().get(n);
 							bytes.write(Ints.toByteArray(nonce));
 						}
 					}
