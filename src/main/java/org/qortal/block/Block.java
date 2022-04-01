@@ -977,11 +977,7 @@ public class Block {
 			return ValidationResult.ONLINE_ACCOUNT_SIGNATURES_MISSING;
 
 		// Verify the online account signatures length
-		int expectedLength;
-		if (this.blockData.getTimestamp() >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp())
-			expectedLength = onlineRewardShares.size() * (Transformer.SIGNATURE_LENGTH + Transformer.REDUCED_SIGNATURE_LENGTH + Transformer.INT_LENGTH + (OnlineAccountsManager.MAX_NONCE_COUNT * Transformer.INT_LENGTH));
-		else
-			expectedLength = onlineRewardShares.size() * Transformer.SIGNATURE_LENGTH;
+		int expectedLength = Block.getExpectedOnlineAccountsSignaturesLength(onlineRewardShares.size(), this.blockData.getTimestamp());
 
 		if (this.blockData.getOnlineAccountsSignatures().length != expectedLength)
 			return ValidationResult.ONLINE_ACCOUNT_SIGNATURES_MALFORMED;
@@ -2062,6 +2058,29 @@ public class Block {
 			index++;
 		}
 		return null;
+	}
+
+	/**
+	 * Expected length of serialized online accounts
+	 * @param onlineRewardSharesCount the number of reward shares in the serialized data
+	 * @param timestamp the block's timestamp, used for versioning / serialization differences
+	 * @return the number of bytes to expect
+	 */
+	public static int getExpectedOnlineAccountsSignaturesLength(int onlineRewardSharesCount, long timestamp) {
+		int expectedLength;
+
+		if (timestamp >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp()) {
+			// byte array contains signatures, reduced signatures, and nonces
+			expectedLength = onlineRewardSharesCount *
+					(Transformer.SIGNATURE_LENGTH + Transformer.REDUCED_SIGNATURE_LENGTH + Transformer.INT_LENGTH +
+							(OnlineAccountsManager.MAX_NONCE_COUNT * Transformer.INT_LENGTH));
+		}
+		else {
+			// byte array contains signatures only
+			expectedLength = onlineRewardSharesCount * Transformer.SIGNATURE_LENGTH;
+		}
+
+		return expectedLength;
 	}
 
 	private void logDebugInfo() {

@@ -217,7 +217,7 @@ public class BlockTransformer extends Transformer {
 			// Online accounts timestamp is only present if there are also signatures
 			onlineAccountsTimestamp = byteBuffer.getLong();
 
-			final int signaturesByteLength = onlineAccountsSignaturesCount * Transformer.SIGNATURE_LENGTH;
+			final int signaturesByteLength = Block.getExpectedOnlineAccountsSignaturesLength(onlineAccountsSignaturesCount, timestamp);
 			if (signaturesByteLength > BlockChain.getInstance().getMaxBlockSize())
 				throw new TransformationException("Byte data too long for online accounts signatures");
 
