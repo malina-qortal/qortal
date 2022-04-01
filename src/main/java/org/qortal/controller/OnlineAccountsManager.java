@@ -7,8 +7,10 @@ import org.qortal.account.Account;
 import org.qortal.account.PrivateKeyAccount;
 import org.qortal.account.PublicKeyAccount;
 import org.qortal.block.BlockChain;
+import org.qortal.crypto.MemoryPoW;
 import org.qortal.data.account.MintingAccountData;
 import org.qortal.data.account.RewardShareData;
+import org.qortal.data.block.BlockData;
 import org.qortal.data.network.OnlineAccountData;
 import org.qortal.network.Network;
 import org.qortal.network.Peer;
@@ -16,10 +18,14 @@ import org.qortal.network.message.*;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
+import org.qortal.settings.Settings;
 import org.qortal.utils.Base58;
 import org.qortal.utils.NTP;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 public class OnlineAccountsManager extends Thread {
@@ -47,6 +53,11 @@ public class OnlineAccountsManager extends Thread {
     private static OnlineAccountsManager instance;
     private volatile boolean isStopping = false;
 
+    // MemoryPoW
+    public final int POW_BUFFER_SIZE = 1 * 1024 * 1024; // bytes
+    public int POW_DIFFICULTY = 18; // leading zero bits
+    public static final int MAX_NONCE_COUNT = 1; // Maximum number of nonces to verify
+
     // To do with online accounts list
     private static final long ONLINE_ACCOUNTS_TASKS_INTERVAL = 10 * 1000L; // ms
     private static final long ONLINE_ACCOUNTS_BROADCAST_INTERVAL = 1 * 60 * 1000L; // ms
@@ -54,7 +65,7 @@ public class OnlineAccountsManager extends Thread {
     public static final long ONLINE_TIMESTAMP_MODULUS_V2 = 30 * 60 * 1000L;
     /** How many (latest) blocks' worth of online accounts we cache */
     private static final int MAX_BLOCKS_CACHED_ONLINE_ACCOUNTS = 2;
-    private static final long ONLINE_ACCOUNTS_V2_PEER_VERSION = 0x0300020000L;
+    private static final long ONLINE_ACCOUNTS_V3_PEER_VERSION = 0x0300030000L;
 
     private long onlineAccountsTasksTimestamp = Controller.startTime + ONLINE_ACCOUNTS_TASKS_INTERVAL; // ms
 
@@ -193,8 +204,16 @@ public class OnlineAccountsManager extends Thread {
             return;
         }
 
+        // Validate mempow if feature trigger is active
+        if (now >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp()) {
+            if (!this.verifyMemoryPoW(onlineAccountData)) {
+                LOGGER.trace(() -> String.format("Rejecting online reward-share for account %s due to invalid PoW nonce", mintingAccount.getAddress()));
+                return;
+            }
+        }
+
         synchronized (this.onlineAccounts) {
-            OnlineAccountData existingAccountData = this.onlineAccounts.stream().filter(account -> Arrays.equals(account.getPublicKey(), onlineAccountData.getPublicKey())).findFirst().orElse(null);
+            OnlineAccountData existingAccountData = this.onlineAccounts.stream().filter(account -> Arrays.equals(account.getPublicKey(), onlineAccountData.getPublicKey())).findFirst().orElse(null); // CME??
 
             if (existingAccountData != null) {
                 if (existingAccountData.getTimestamp() < onlineAccountData.getTimestamp()) {
@@ -225,21 +244,21 @@ public class OnlineAccountsManager extends Thread {
             return;
 
         final long onlineAccountsTimestamp = toOnlineAccountTimestamp(now);
-        byte[] timestampBytes = Longs.toByteArray(onlineAccountsTimestamp);
+
+        List<MintingAccountData> mintingAccounts = new ArrayList<>();
 
         synchronized (this.onlineAccounts) {
             this.onlineAccounts.clear();
-
-            for (PrivateKeyAccount onlineAccount : onlineAccounts) {
-                // Check mintingAccount is actually reward-share?
-
-                byte[] signature = onlineAccount.sign(timestampBytes);
-                byte[] publicKey = onlineAccount.getPublicKey();
-
-                OnlineAccountData ourOnlineAccountData = new OnlineAccountData(onlineAccountsTimestamp, signature, publicKey);
-                this.onlineAccounts.add(ourOnlineAccountData);
-            }
         }
+
+        for (PrivateKeyAccount onlineAccount : onlineAccounts) {
+            // Check mintingAccount is actually reward-share?
+
+            MintingAccountData mintingAccountData = new MintingAccountData(onlineAccount.getPrivateKey(), onlineAccount.getPublicKey());
+            mintingAccounts.add(mintingAccountData);
+        }
+
+        computeOurAccountsForTimestamp(mintingAccounts, onlineAccountsTimestamp);
     }
 
     private void performOnlineAccountsTasks() {
@@ -273,11 +292,11 @@ public class OnlineAccountsManager extends Thread {
                 safeOnlineAccounts = new ArrayList<>(this.onlineAccounts);
             }
 
-            Message messageV1 = new GetOnlineAccountsMessage(safeOnlineAccounts);
             Message messageV2 = new GetOnlineAccountsV2Message(safeOnlineAccounts);
+            Message messageV3 = new GetOnlineAccountsV3Message(safeOnlineAccounts);
 
             Network.getInstance().broadcast(peer ->
-                    peer.getPeersVersion() >= ONLINE_ACCOUNTS_V2_PEER_VERSION ? messageV2 : messageV1
+                    peer.getPeersVersion() >= ONLINE_ACCOUNTS_V3_PEER_VERSION ? messageV3 : messageV2
             );
         }
     }
@@ -285,6 +304,11 @@ public class OnlineAccountsManager extends Thread {
     private void sendOurOnlineAccountsInfo() {
         final Long now = NTP.getTime();
         if (now == null) {
+            return;
+        }
+
+        // If we're not up-to-date, then there's no point in computing anything yet
+        if (!Controller.getInstance().isUpToDate()) {
             return;
         }
 
@@ -328,55 +352,183 @@ public class OnlineAccountsManager extends Thread {
 
         // 'current' timestamp
         final long onlineAccountsTimestamp = toOnlineAccountTimestamp(now);
-        boolean hasInfoChanged = false;
+        computeOurAccountsForTimestamp(mintingAccounts, onlineAccountsTimestamp);
 
-        byte[] timestampBytes = Longs.toByteArray(onlineAccountsTimestamp);
-        List<OnlineAccountData> ourOnlineAccounts = new ArrayList<>();
+        // 'next' timestamp // TODO
+//        final long nextOnlineAccountsTimestamp = toOnlineAccountTimestamp(now) + getOnlineTimestampModulus();
+//        computeOurAccountsForTimestamp(mintingAccounts, nextOnlineAccountsTimestamp);
+    }
 
-        MINTING_ACCOUNTS:
-        for (MintingAccountData mintingAccountData : mintingAccounts) {
-            PrivateKeyAccount mintingAccount = new PrivateKeyAccount(null, mintingAccountData.getPrivateKey());
+    /**
+     * Compute a mempow nonce and signature for a given set of accounts and timestamp
+     * @param mintingAccounts - the online accounts
+     * @param onlineAccountsTimestamp - the online accounts timestamp
+     */
+    private void computeOurAccountsForTimestamp(List<MintingAccountData> mintingAccounts, long onlineAccountsTimestamp) {
+        try (final Repository repository = RepositoryManager.getRepository()) {
 
-            byte[] signature = mintingAccount.sign(timestampBytes);
-            byte[] publicKey = mintingAccount.getPublicKey();
+            boolean hasInfoChanged = false;
 
-            // Our account is online
-            OnlineAccountData ourOnlineAccountData = new OnlineAccountData(onlineAccountsTimestamp, signature, publicKey);
-            synchronized (this.onlineAccounts) {
-                Iterator<OnlineAccountData> iterator = this.onlineAccounts.iterator();
+            final long currentOnlineAccountsTimestamp = toOnlineAccountTimestamp(NTP.getTime());
+
+            List<OnlineAccountData> ourOnlineAccounts = new ArrayList<>();
+
+            MINTING_ACCOUNTS:
+            for (MintingAccountData mintingAccountData : mintingAccounts) {
+                PrivateKeyAccount mintingAccount = new PrivateKeyAccount(null, mintingAccountData.getPrivateKey());
+                byte[] publicKey = mintingAccount.getPublicKey();
+
+                // Our account is online
+                List<OnlineAccountData> safeOnlineAccounts;
+                synchronized (this.onlineAccounts) {
+                    safeOnlineAccounts = new ArrayList<>(this.onlineAccounts);
+                }
+
+                Iterator<OnlineAccountData> iterator = safeOnlineAccounts.iterator();
                 while (iterator.hasNext()) {
                     OnlineAccountData existingOnlineAccountData = iterator.next();
 
-                    if (Arrays.equals(existingOnlineAccountData.getPublicKey(), ourOnlineAccountData.getPublicKey())) {
+                    if (Arrays.equals(existingOnlineAccountData.getPublicKey(), publicKey)) {
                         // If our online account is already present, with same timestamp, then move on to next mintingAccount
                         if (existingOnlineAccountData.getTimestamp() == onlineAccountsTimestamp)
                             continue MINTING_ACCOUNTS;
 
                         // If our online account is already present, but with older timestamp, then remove it
-                        iterator.remove();
-                        break;
+                        if (existingOnlineAccountData.getTimestamp() < currentOnlineAccountsTimestamp) {
+                            this.onlineAccounts.remove(existingOnlineAccountData); // Safe because we are iterating through a copy
+                        }
                     }
                 }
 
+                // We need to add a new account
+
+                byte[] timestampBytes = Longs.toByteArray(onlineAccountsTimestamp);
+                int chainHeight = repository.getBlockRepository().getBlockchainHeight();
+                int referenceHeight = Math.max(1, chainHeight - 10);
+                BlockData recentBlockData = repository.getBlockRepository().fromHeight(referenceHeight);
+                if (recentBlockData == null || recentBlockData.getSignature() == null) {
+                    LOGGER.info("Unable to compute online accounts without having a recent block");
+                    return;
+                }
+                byte[] reducedRecentBlockSignature = Arrays.copyOfRange(recentBlockData.getSignature(), 0, 8);
+
+                byte[] mempowBytes;
+                try {
+                    mempowBytes = this.getMemoryPoWBytes(publicKey, onlineAccountsTimestamp, reducedRecentBlockSignature);
+                }
+                catch (IOException e) {
+                    LOGGER.info("Unable to create bytes for MemoryPoW. Moving on to next account...");
+                    continue MINTING_ACCOUNTS;
+                }
+
+                Integer nonce = this.computeMemoryPoW(mempowBytes, publicKey);
+                if (nonce == null) {
+                    // Send zero if we haven't computed a nonce due to feature trigger timestamp
+                    nonce = 0;
+                }
+
+                byte[] signature = mintingAccount.sign(timestampBytes); // TODO: include nonce and block signature?
+
+                OnlineAccountData ourOnlineAccountData = new OnlineAccountData(onlineAccountsTimestamp, signature, publicKey, Arrays.asList(nonce), reducedRecentBlockSignature);
+
                 this.onlineAccounts.add(ourOnlineAccountData);
+
+                LOGGER.trace(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
+                ourOnlineAccounts.add(ourOnlineAccountData);
+                hasInfoChanged = true;
             }
 
-            LOGGER.trace(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
-            ourOnlineAccounts.add(ourOnlineAccountData);
-            hasInfoChanged = true;
+            if (!hasInfoChanged)
+                return;
+
+            Message messageV2 = new OnlineAccountsV2Message(ourOnlineAccounts);
+            Message messageV3 = new OnlineAccountsV3Message(ourOnlineAccounts);
+
+            Network.getInstance().broadcast(peer ->
+                    peer.getPeersVersion() >= ONLINE_ACCOUNTS_V3_PEER_VERSION ? messageV3 : messageV2
+            );
+
+            LOGGER.trace(() -> String.format("Broadcasted %d online account%s with timestamp %d", ourOnlineAccounts.size(), (ourOnlineAccounts.size() != 1 ? "s" : ""), onlineAccountsTimestamp));
+
+        } catch (DataException e) {
+            LOGGER.error(String.format("Repository issue while computing online accounts"), e);
+        }
+    }
+
+    private byte[] getMemoryPoWBytes(byte[] publicKey, long onlineAccountsTimestamp, byte[] reducedRecentBlockSignature) throws IOException {
+        byte[] timestampBytes = Longs.toByteArray(onlineAccountsTimestamp);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        outputStream.write(publicKey);
+        outputStream.write(timestampBytes);
+        outputStream.write(reducedRecentBlockSignature);
+
+        return outputStream.toByteArray();
+    }
+
+    private Integer computeMemoryPoW(byte[] bytes, byte[] publicKey) {
+        Long startTime = NTP.getTime();
+        if (startTime < BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp() || Settings.getInstance().isOnlineAccountsMemPoWEnabled()) {
+            LOGGER.info("Mempow start timestamp not yet reached, and onlineAccountsMemPoWEnabled not enabled in settings");
+            return null;
         }
 
-        if (!hasInfoChanged)
-            return;
+        LOGGER.info(String.format("Computing nonce for account %.8s...", Base58.encode(publicKey)));
 
-        Message messageV1 = new OnlineAccountsMessage(ourOnlineAccounts);
-        Message messageV2 = new OnlineAccountsV2Message(ourOnlineAccounts);
+        // Calculate the time until the next online timestamp and use it as a timeout when computing the nonce
+        final long nextOnlineAccountsTimestamp = toOnlineAccountTimestamp(startTime) + getOnlineTimestampModulus();
+        long timeUntilNextTimestamp = nextOnlineAccountsTimestamp - startTime;
 
-        Network.getInstance().broadcast(peer ->
-                peer.getPeersVersion() >= ONLINE_ACCOUNTS_V2_PEER_VERSION ? messageV2 : messageV1
-        );
+        Integer nonce;
+        try {
+            nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, POW_DIFFICULTY, timeUntilNextTimestamp);
+        } catch (TimeoutException e) {
+            LOGGER.info("Timed out computing nonce for account %.8s", Base58.encode(publicKey));
+            return null;
+        }
 
-        LOGGER.trace(() -> String.format("Broadcasted %d online account%s with timestamp %d", ourOnlineAccounts.size(), (ourOnlineAccounts.size() != 1 ? "s" : ""), onlineAccountsTimestamp));
+        double totalSeconds = (NTP.getTime() - startTime) / 1000.0f;
+        int minutes = (int) ((totalSeconds % 3600) / 60);
+        int seconds = (int) (totalSeconds % 60);
+        double hashRate = nonce / totalSeconds;
+
+        LOGGER.info(String.format("Computed nonce for account %.8s: %d. Buffer size: %d. Difficulty: %d. " +
+                        "Time taken: %02d:%02d. Hashrate: %f", Base58.encode(publicKey), nonce,
+                POW_BUFFER_SIZE, POW_DIFFICULTY, minutes, seconds, hashRate));
+
+        return nonce;
+    }
+
+    public boolean verifyMemoryPoW(OnlineAccountData onlineAccountData) {
+        List<Integer> nonces = onlineAccountData.getNonces();
+        if (nonces == null || nonces.isEmpty()) {
+            // Missing required nonce value(s)
+            return false;
+        }
+
+        if (nonces.size() > MAX_NONCE_COUNT) {
+            // More than the allowed nonce count
+            return false;
+        }
+
+        byte[] reducedBlockSignature = onlineAccountData.getReducedBlockSignature();
+        if (reducedBlockSignature == null) {
+            // Missing required block signature
+            return false;
+        }
+
+        byte[] mempowBytes;
+        try {
+            mempowBytes = this.getMemoryPoWBytes(onlineAccountData.getPublicKey(), onlineAccountData.getTimestamp(), reducedBlockSignature);
+        } catch (IOException e) {
+            return false;
+        }
+
+        // For now, we will only require a single nonce
+        int nonce = nonces.get(0);
+
+        // Verify the nonce
+        return MemoryPoW.verify2(mempowBytes, POW_BUFFER_SIZE, POW_DIFFICULTY, nonce);
     }
 
     public static long toOnlineAccountTimestamp(long timestamp) {
@@ -422,53 +574,6 @@ public class OnlineAccountsManager extends Thread {
 
     // Network handlers
 
-    public void onNetworkGetOnlineAccountsMessage(Peer peer, Message message) {
-        GetOnlineAccountsMessage getOnlineAccountsMessage = (GetOnlineAccountsMessage) message;
-
-        List<OnlineAccountData> excludeAccounts = getOnlineAccountsMessage.getOnlineAccounts();
-
-        // Send online accounts info, excluding entries with matching timestamp & public key from excludeAccounts
-        List<OnlineAccountData> accountsToSend;
-        synchronized (this.onlineAccounts) {
-            accountsToSend = new ArrayList<>(this.onlineAccounts);
-        }
-
-        Iterator<OnlineAccountData> iterator = accountsToSend.iterator();
-
-        SEND_ITERATOR:
-        while (iterator.hasNext()) {
-            OnlineAccountData onlineAccountData = iterator.next();
-
-            for (int i = 0; i < excludeAccounts.size(); ++i) {
-                OnlineAccountData excludeAccountData = excludeAccounts.get(i);
-
-                if (onlineAccountData.getTimestamp() == excludeAccountData.getTimestamp() && Arrays.equals(onlineAccountData.getPublicKey(), excludeAccountData.getPublicKey())) {
-                    iterator.remove();
-                    continue SEND_ITERATOR;
-                }
-            }
-        }
-
-        Message onlineAccountsMessage = new OnlineAccountsMessage(accountsToSend);
-        peer.sendMessage(onlineAccountsMessage);
-
-        LOGGER.trace(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
-    }
-
-    public void onNetworkOnlineAccountsMessage(Peer peer, Message message) {
-        OnlineAccountsMessage onlineAccountsMessage = (OnlineAccountsMessage) message;
-
-        List<OnlineAccountData> peersOnlineAccounts = onlineAccountsMessage.getOnlineAccounts();
-        LOGGER.trace(() -> String.format("Received %d online accounts from %s", peersOnlineAccounts.size(), peer));
-
-        try (final Repository repository = RepositoryManager.getRepository()) {
-            for (OnlineAccountData onlineAccountData : peersOnlineAccounts)
-                this.verifyAndAddAccount(repository, onlineAccountData);
-        } catch (DataException e) {
-            LOGGER.error(String.format("Repository issue while verifying online accounts from peer %s", peer), e);
-        }
-    }
-
     public void onNetworkGetOnlineAccountsV2Message(Peer peer, Message message) {
         GetOnlineAccountsV2Message getOnlineAccountsMessage = (GetOnlineAccountsV2Message) message;
 
@@ -504,6 +609,67 @@ public class OnlineAccountsManager extends Thread {
 
     public void onNetworkOnlineAccountsV2Message(Peer peer, Message message) {
         OnlineAccountsV2Message onlineAccountsMessage = (OnlineAccountsV2Message) message;
+
+        List<OnlineAccountData> peersOnlineAccounts = onlineAccountsMessage.getOnlineAccounts();
+        LOGGER.debug(String.format("Received %d online accounts from %s", peersOnlineAccounts.size(), peer));
+
+        int importCount = 0;
+
+        // Add any online accounts to the queue that aren't already present
+        for (OnlineAccountData onlineAccountData : peersOnlineAccounts) {
+
+            // Do we already know about this online account data?
+            if (onlineAccounts.contains(onlineAccountData)) {
+                continue;
+            }
+
+            // Is it already in the import queue?
+            if (onlineAccountsImportQueue.contains(onlineAccountData)) {
+                continue;
+            }
+
+            onlineAccountsImportQueue.add(onlineAccountData);
+            importCount++;
+        }
+
+        LOGGER.debug(String.format("Added %d online accounts to queue", importCount));
+    }
+
+    public void onNetworkGetOnlineAccountsV3Message(Peer peer, Message message) {
+        GetOnlineAccountsV3Message getOnlineAccountsMessage = (GetOnlineAccountsV3Message) message;
+
+        List<OnlineAccountData> excludeAccounts = getOnlineAccountsMessage.getOnlineAccounts();
+
+        // Send online accounts info, excluding entries with matching timestamp & public key from excludeAccounts
+        List<OnlineAccountData> accountsToSend;
+        synchronized (this.onlineAccounts) {
+            accountsToSend = new ArrayList<>(this.onlineAccounts);
+        }
+
+        Iterator<OnlineAccountData> iterator = accountsToSend.iterator();
+
+        SEND_ITERATOR:
+        while (iterator.hasNext()) {
+            OnlineAccountData onlineAccountData = iterator.next();
+
+            for (int i = 0; i < excludeAccounts.size(); ++i) {
+                OnlineAccountData excludeAccountData = excludeAccounts.get(i);
+
+                if (onlineAccountData.getTimestamp() == excludeAccountData.getTimestamp() && Arrays.equals(onlineAccountData.getPublicKey(), excludeAccountData.getPublicKey())) {
+                    iterator.remove();
+                    continue SEND_ITERATOR;
+                }
+            }
+        }
+
+        Message onlineAccountsMessage = new OnlineAccountsV3Message(accountsToSend);
+        peer.sendMessage(onlineAccountsMessage);
+
+        LOGGER.trace(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
+    }
+
+    public void onNetworkOnlineAccountsV3Message(Peer peer, Message message) {
+        OnlineAccountsV3Message onlineAccountsMessage = (OnlineAccountsV3Message) message;
 
         List<OnlineAccountData> peersOnlineAccounts = onlineAccountsMessage.getOnlineAccounts();
         LOGGER.debug(String.format("Received %d online accounts from %s", peersOnlineAccounts.size(), peer));

@@ -1140,20 +1140,20 @@ public class Controller extends Thread {
 				TransactionImporter.getInstance().onNetworkTransactionSignaturesMessage(peer, message);
 				break;
 
-			case GET_ONLINE_ACCOUNTS:
-				OnlineAccountsManager.getInstance().onNetworkGetOnlineAccountsMessage(peer, message);
-				break;
-
-			case ONLINE_ACCOUNTS:
-				OnlineAccountsManager.getInstance().onNetworkOnlineAccountsMessage(peer, message);
-				break;
-
 			case GET_ONLINE_ACCOUNTS_V2:
 				OnlineAccountsManager.getInstance().onNetworkGetOnlineAccountsV2Message(peer, message);
 				break;
 
 			case ONLINE_ACCOUNTS_V2:
 				OnlineAccountsManager.getInstance().onNetworkOnlineAccountsV2Message(peer, message);
+				break;
+
+			case GET_ONLINE_ACCOUNTS_V3:
+				OnlineAccountsManager.getInstance().onNetworkGetOnlineAccountsV3Message(peer, message);
+				break;
+
+			case ONLINE_ACCOUNTS_V3:
+				OnlineAccountsManager.getInstance().onNetworkOnlineAccountsV3Message(peer, message);
 				break;
 
 			case GET_ARBITRARY_DATA:

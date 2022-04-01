@@ -63,18 +63,6 @@ public class OnlineAccountsTests extends Common {
 
         assertEquals("size mismatch", onlineAccountsOut.size(), onlineAccountsIn.size());
         assertTrue("accounts mismatch", onlineAccountsIn.containsAll(onlineAccountsOut));
-
-        Message oldMessageOut = new GetOnlineAccountsMessage(onlineAccountsOut);
-        byte[] oldMessageBytes = oldMessageOut.toBytes();
-
-        long numTimestamps = onlineAccountsOut.stream().mapToLong(OnlineAccountData::getTimestamp).sorted().distinct().count();
-
-        System.out.println(String.format("For %d accounts split across %d timestamp%s: old size %d vs new size %d",
-                onlineAccountsOut.size(),
-                numTimestamps,
-                numTimestamps != 1 ? "s" : "",
-                oldMessageBytes.length,
-                messageBytes.length));
     }
 
     @Test
@@ -92,18 +80,6 @@ public class OnlineAccountsTests extends Common {
 
         assertEquals("size mismatch", onlineAccountsOut.size(), onlineAccountsIn.size());
         assertTrue("accounts mismatch", onlineAccountsIn.containsAll(onlineAccountsOut));
-
-        Message oldMessageOut = new OnlineAccountsMessage(onlineAccountsOut);
-        byte[] oldMessageBytes = oldMessageOut.toBytes();
-
-        long numTimestamps = onlineAccountsOut.stream().mapToLong(OnlineAccountData::getTimestamp).sorted().distinct().count();
-
-        System.out.println(String.format("For %d accounts split across %d timestamp%s: old size %d vs new size %d",
-                onlineAccountsOut.size(),
-                numTimestamps,
-                numTimestamps != 1 ? "s" : "",
-                oldMessageBytes.length,
-                messageBytes.length));
     }
 
     private List<OnlineAccountData> generateOnlineAccounts(boolean withSignatures) {

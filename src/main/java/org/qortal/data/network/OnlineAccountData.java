@@ -1,6 +1,7 @@
 package org.qortal.data.network;
 
 import java.util.Arrays;
+import java.util.List;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -15,6 +16,8 @@ public class OnlineAccountData {
 	protected long timestamp;
 	protected byte[] signature;
 	protected byte[] publicKey;
+	protected List<Integer> nonces;
+	protected byte[] reducedBlockSignature;
 
 	// Constructors
 
@@ -22,10 +25,16 @@ public class OnlineAccountData {
 	protected OnlineAccountData() {
 	}
 
-	public OnlineAccountData(long timestamp, byte[] signature, byte[] publicKey) {
+	public OnlineAccountData(long timestamp, byte[] signature, byte[] publicKey, List<Integer> nonces, byte[] reducedBlockSignature) {
 		this.timestamp = timestamp;
 		this.signature = signature;
 		this.publicKey = publicKey;
+		this.nonces = nonces;
+		this.reducedBlockSignature = reducedBlockSignature;
+	}
+
+	public OnlineAccountData(long timestamp, byte[] signature, byte[] publicKey) {
+		this(timestamp, signature, publicKey, null, null);
 	}
 
 	public long getTimestamp() {
@@ -38,6 +47,14 @@ public class OnlineAccountData {
 
 	public byte[] getPublicKey() {
 		return this.publicKey;
+	}
+
+	public List<Integer> getNonces() {
+		return this.nonces;
+	}
+
+	public byte[] getReducedBlockSignature() {
+		return this.reducedBlockSignature;
 	}
 
 	// For JAXB
@@ -68,6 +85,8 @@ public class OnlineAccountData {
 
 		if (!Arrays.equals(otherOnlineAccountData.publicKey, this.publicKey))
 			return false;
+
+		// Best not to consider additional properties for the purposes of uniqueness
 
 		return true;
 	}
