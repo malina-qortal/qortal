@@ -987,7 +987,7 @@ public class Block {
 		byte[] onlineTimestampBytes = Longs.toByteArray(onlineTimestamp);
 
 		// If this block is much older than current online timestamp, then there's no point checking current online accounts
-		List<OnlineAccountData> currentOnlineAccounts = onlineTimestamp < NTP.getTime() - OnlineAccountsManager.ONLINE_TIMESTAMP_MODULUS
+		List<OnlineAccountData> currentOnlineAccounts = onlineTimestamp < NTP.getTime() - OnlineAccountsManager.getOnlineTimestampModulus()
 				? null
 				: OnlineAccountsManager.getInstance().getOnlineAccounts();
 		List<OnlineAccountData> latestBlocksOnlineAccounts = OnlineAccountsManager.getInstance().getLatestBlocksOnlineAccounts();

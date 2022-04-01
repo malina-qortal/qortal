@@ -12,7 +12,6 @@ import java.util.function.Supplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.qortal.account.Account;
-import org.qortal.controller.Controller;
 import org.qortal.controller.OnlineAccountsManager;
 import org.qortal.controller.tradebot.TradeBot;
 import org.qortal.crosschain.ACCT;
@@ -49,7 +48,7 @@ public class PresenceTransaction extends Transaction {
 		REWARD_SHARE(0) {
 			@Override
 			public long getLifetime() {
-				return OnlineAccountsManager.ONLINE_TIMESTAMP_MODULUS;
+				return OnlineAccountsManager.getOnlineTimestampModulus();
 			}
 		},
 		TRADE_BOT(1) {

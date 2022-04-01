@@ -50,8 +50,8 @@ public class OnlineAccountsManager extends Thread {
     // To do with online accounts list
     private static final long ONLINE_ACCOUNTS_TASKS_INTERVAL = 10 * 1000L; // ms
     private static final long ONLINE_ACCOUNTS_BROADCAST_INTERVAL = 1 * 60 * 1000L; // ms
-    public static final long ONLINE_TIMESTAMP_MODULUS = 5 * 60 * 1000L;
-    private static final long LAST_SEEN_EXPIRY_PERIOD = (ONLINE_TIMESTAMP_MODULUS * 2) + (1 * 60 * 1000L);
+    public static final long ONLINE_TIMESTAMP_MODULUS_V1 = 5 * 60 * 1000L;
+    public static final long ONLINE_TIMESTAMP_MODULUS_V2 = 30 * 60 * 1000L;
     /** How many (latest) blocks' worth of online accounts we cache */
     private static final int MAX_BLOCKS_CACHED_ONLINE_ACCOUNTS = 2;
     private static final long ONLINE_ACCOUNTS_V2_PEER_VERSION = 0x0300020000L;
@@ -116,6 +116,13 @@ public class OnlineAccountsManager extends Thread {
         this.interrupt();
     }
 
+    public static long getOnlineTimestampModulus() {
+        if (NTP.getTime() >= BlockChain.getInstance().getOnlineAccountsModulusV2Timestamp()) {
+            return ONLINE_TIMESTAMP_MODULUS_V2;
+        }
+        return ONLINE_TIMESTAMP_MODULUS_V1;
+    }
+
 
     // Online accounts import queue
 
@@ -159,7 +166,7 @@ public class OnlineAccountsManager extends Thread {
         PublicKeyAccount otherAccount = new PublicKeyAccount(repository, onlineAccountData.getPublicKey());
 
         // Check timestamp is 'recent' here
-        if (Math.abs(onlineAccountData.getTimestamp() - now) > ONLINE_TIMESTAMP_MODULUS * 2) {
+        if (Math.abs(onlineAccountData.getTimestamp() - now) > getOnlineTimestampModulus() * 2) {
             LOGGER.trace(() -> String.format("Rejecting online account %s with out of range timestamp %d", otherAccount.getAddress(), onlineAccountData.getTimestamp()));
             return;
         }
@@ -241,7 +248,8 @@ public class OnlineAccountsManager extends Thread {
             return;
 
         // Expire old entries
-        final long cutoffThreshold = now - LAST_SEEN_EXPIRY_PERIOD;
+        final long lastSeenExpiryPeriod = (getOnlineTimestampModulus() * 2) + (1 * 60 * 1000L);
+        final long cutoffThreshold = now - lastSeenExpiryPeriod;
         synchronized (this.onlineAccounts) {
             Iterator<OnlineAccountData> iterator = this.onlineAccounts.iterator();
             while (iterator.hasNext()) {
@@ -372,7 +380,7 @@ public class OnlineAccountsManager extends Thread {
     }
 
     public static long toOnlineAccountTimestamp(long timestamp) {
-        return (timestamp / ONLINE_TIMESTAMP_MODULUS) * ONLINE_TIMESTAMP_MODULUS;
+        return (timestamp / getOnlineTimestampModulus()) * getOnlineTimestampModulus();
     }
 
     /** Returns list of online accounts with timestamp recent enough to be considered currently online. */

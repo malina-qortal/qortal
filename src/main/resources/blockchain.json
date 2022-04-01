@@ -17,6 +17,7 @@
 	"founderEffectiveMintingLevel": 10,
 	"onlineAccountSignaturesMinLifetime": 43200000,
 	"onlineAccountSignaturesMaxLifetime": 86400000,
+	"onlineAccountsModulusV2Timestamp": 9999999999999,
 	"rewardsByHeight": [
 		{ "height": 1, "reward": 5.00 },
 		{ "height": 259201, "reward": 4.75 },
