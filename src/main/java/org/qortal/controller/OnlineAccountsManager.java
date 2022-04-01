@@ -484,7 +484,7 @@ public class OnlineAccountsManager extends Thread {
         try {
             nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, POW_DIFFICULTY, timeUntilNextTimestamp);
         } catch (TimeoutException e) {
-            LOGGER.info("Timed out computing nonce for account %.8s", Base58.encode(publicKey));
+            LOGGER.info(String.format("Timed out computing nonce for account %.8s", Base58.encode(publicKey)));
             return null;
         }
 
