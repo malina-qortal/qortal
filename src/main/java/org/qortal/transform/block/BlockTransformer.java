@@ -6,11 +6,13 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.qortal.block.Block;
 import org.qortal.block.BlockChain;
 import org.qortal.data.at.ATStateData;
 import org.qortal.data.block.BlockData;
+import org.qortal.data.network.OnlineAccountData;
 import org.qortal.data.transaction.TransactionData;
 import org.qortal.repository.DataException;
 import org.qortal.transaction.Transaction;
@@ -26,6 +28,8 @@ import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 
 import io.druid.extendedset.intset.ConciseSet;
+
+import static org.qortal.controller.OnlineAccountsManager.MAX_NONCE_COUNT;
 
 public class BlockTransformer extends Transformer {
 
@@ -416,16 +420,101 @@ public class BlockTransformer extends Transformer {
 		return encodedSignatures;
 	}
 
-	public static List<byte[]> decodeTimestampSignatures(byte[] encodedSignatures) {
-		List<byte[]> signatures = new ArrayList<>();
+	public static byte[] encodeOnlineAccountSignatures(Map<Integer, OnlineAccountData> indexedOnlineAccounts,
+													   List<Integer> accountIndexes,
+													   int onlineAccountsCount,
+													   long timestamp) {
+		byte[] onlineAccountsSignatures;
 
-		for (int i = 0; i < encodedSignatures.length; i += Transformer.SIGNATURE_LENGTH) {
-			byte[] signature = new byte[Transformer.SIGNATURE_LENGTH];
-			System.arraycopy(encodedSignatures, i, signature, 0, Transformer.SIGNATURE_LENGTH);
-			signatures.add(signature);
+		if (timestamp >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp()) {
+			// Online accounts must include at least one nonce and a reduced block signature from this time onwards
+
+			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+			for (int i = 0; i < onlineAccountsCount; ++i) {
+				Integer accountIndex = accountIndexes.get(i);
+				OnlineAccountData onlineAccountData = indexedOnlineAccounts.get(accountIndex);
+
+				List<Integer> nonces = onlineAccountData.getNonces();
+				byte[] reducedBlockSignature = onlineAccountData.getReducedBlockSignature();
+				if (nonces == null || nonces.isEmpty() || nonces.size() > MAX_NONCE_COUNT || reducedBlockSignature == null) {
+					// Missing or invalid data, so exclude this online account
+					continue;
+				}
+
+				try {
+					outputStream.write(onlineAccountData.getSignature());
+
+					outputStream.write(reducedBlockSignature);
+
+					outputStream.write(Ints.toByteArray(nonces.size()));
+
+					for (int n = 0; n < nonces.size(); ++n) {
+						Integer nonce = nonces.get(n);
+						outputStream.write(Ints.toByteArray(nonce));
+					}
+
+				} catch (IOException e) {
+					// Couldn't serialize this online account, so exclude it
+					continue;
+				}
+			}
+			onlineAccountsSignatures = outputStream.toByteArray();
+		}
+		else {
+			// Exclude nonce and reference block signature from online accounts data
+			// Concatenate online account timestamp signatures (in correct order)
+			onlineAccountsSignatures = new byte[onlineAccountsCount * Transformer.SIGNATURE_LENGTH];
+			for (int i = 0; i < onlineAccountsCount; ++i) {
+				Integer accountIndex = accountIndexes.get(i);
+				OnlineAccountData onlineAccountData = indexedOnlineAccounts.get(accountIndex);
+				System.arraycopy(onlineAccountData.getSignature(), 0, onlineAccountsSignatures, i * Transformer.SIGNATURE_LENGTH, Transformer.SIGNATURE_LENGTH);
+			}
 		}
 
-		return signatures;
+		return onlineAccountsSignatures;
+	}
+
+	public static List<OnlineAccountData> decodeOnlineAccountSignatures(byte[] encodedSignatures, int count, long timestamp) {
+		List<OnlineAccountData> onlineAccountSignatures = new ArrayList<>();
+
+		if (timestamp >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp()) {
+			// byte array contains signatures, reduced signatures, and nonces
+			ByteBuffer byteBuffer = ByteBuffer.wrap(encodedSignatures);
+
+			for (int i = 0; i < count; ++i) {
+				byte[] signature = new byte[Transformer.SIGNATURE_LENGTH];
+				byteBuffer.get(signature);
+
+				byte[] reducedBlockSignature = new byte[Transformer.REDUCED_SIGNATURE_LENGTH];
+				byteBuffer.get(reducedBlockSignature);
+
+				int nonceCount = byteBuffer.getInt();
+
+				List<Integer> nonces = new ArrayList<>();
+				for (int n = 0; n < nonceCount; ++n) { // TODO: check against NONCE_COUNT in block validation
+					Integer nonce = byteBuffer.getInt();
+					nonces.add(nonce);
+				}
+
+				// Create an OnlineAccountData wrapper object containing the signature, nonce(s), and reduced block signature
+				OnlineAccountData onlineAccountDataWrapper = new OnlineAccountData(0, signature, null, nonces, reducedBlockSignature);
+				onlineAccountSignatures.add(onlineAccountDataWrapper);
+			}
+
+		}
+		else {
+			// byte array contains signatures only
+			for (int i = 0; i < encodedSignatures.length; i += Transformer.SIGNATURE_LENGTH) {
+				byte[] signature = new byte[Transformer.SIGNATURE_LENGTH];
+				System.arraycopy(encodedSignatures, i, signature, 0, Transformer.SIGNATURE_LENGTH);
+
+				// Create an OnlineAccountData wrapper object containing only the signature
+				OnlineAccountData onlineAccountDataWrapper = new OnlineAccountData(0, signature, null);
+				onlineAccountSignatures.add(onlineAccountDataWrapper);
+			}
+		}
+
+		return onlineAccountSignatures;
 	}
 
 }

@@ -178,4 +178,65 @@ public class OnlineAccountsTests extends Common {
             assertTrue(onlineAccountSignatures.size() >= 1 && onlineAccountSignatures.size() <= 3);
         }
     }
+
+    @Test
+    public void testBeforeMemoryPoW() throws IllegalAccessException, DataException {
+        try (final Repository repository = RepositoryManager.getRepository()) {
+
+            // Set feature trigger timestamp to MAX long so that it is inactive
+            FieldUtils.writeField(BlockChain.getInstance(), "onlineAccountsMemoryPoWTimestamp", Long.MAX_VALUE, true);
+
+            // Mint some blocks
+            for (int i = 0; i < 10; i++) {
+                BlockMinter.mintTestingBlock(repository, Common.getTestAccount(repository, "alice-reward-share"));
+            }
+        }
+    }
+
+    @Test
+    public void testMemoryPoW() throws IllegalAccessException, DataException {
+        try (final Repository repository = RepositoryManager.getRepository()) {
+
+            // Set feature trigger timestamp to 0 so that it is active
+            FieldUtils.writeField(BlockChain.getInstance(), "onlineAccountsMemoryPoWTimestamp", 0L, true);
+
+            // Set difficulty to 5, to speed up test
+            FieldUtils.writeField(OnlineAccountsManager.getInstance(), "POW_DIFFICULTY", 5, true);
+
+            // Mint some blocks
+            for (int i = 0; i < 10; i++) {
+                BlockMinter.mintTestingBlock(repository, Common.getTestAccount(repository, "alice-reward-share"));
+            }
+        }
+    }
+
+    @Test
+    public void testTransitionToMemoryPoW() throws IllegalAccessException, DataException {
+        try (final Repository repository = RepositoryManager.getRepository()) {
+
+            // Set feature trigger timestamp to now + 5 mins
+            long featureTriggerTimestamp = NTP.getTime() + (5 * 60 * 1000L);
+            FieldUtils.writeField(BlockChain.getInstance(), "onlineAccountsMemoryPoWTimestamp", featureTriggerTimestamp, true);
+
+            // Set difficulty to 5, to speed up test
+            FieldUtils.writeField(OnlineAccountsManager.getInstance(), "POW_DIFFICULTY", 5, true);
+
+            // Mint a block
+            Block block = BlockMinter.mintTestingBlock(repository, Common.getTestAccount(repository, "alice-reward-share"));
+            assertEquals(1, block.getBlockData().getOnlineAccountsCount());
+
+            // Ensure online accounts signatures are in legacy format (no nonce or reduced block signature)
+            assertEquals(64, block.getBlockData().getOnlineAccountsSignatures().length);
+
+            // Mint some blocks (at least 5 minutes' worth, to allow mempow to kick in)
+            for (int i = 0; i < 10; i++) {
+                block = BlockMinter.mintTestingBlock(repository, Common.getTestAccount(repository, "alice-reward-share"));
+                assertEquals(1, block.getBlockData().getOnlineAccountsCount());
+            }
+
+            // Ensure online accounts signatures are in new format (with 1 nonce and a reduced block signature)
+            assertEquals(80, block.getBlockData().getOnlineAccountsSignatures().length);
+        }
+    }
+
 }

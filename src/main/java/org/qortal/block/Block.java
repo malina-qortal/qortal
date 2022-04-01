@@ -85,7 +85,8 @@ public class Block {
 		ONLINE_ACCOUNT_UNKNOWN(71),
 		ONLINE_ACCOUNT_SIGNATURES_MISSING(72),
 		ONLINE_ACCOUNT_SIGNATURES_MALFORMED(73),
-		ONLINE_ACCOUNT_SIGNATURE_INCORRECT(74);
+		ONLINE_ACCOUNT_SIGNATURE_INCORRECT(74),
+		ONLINE_ACCOUNT_NONCE_INCORRECT(75);
 
 		public final int value;
 
@@ -313,6 +314,15 @@ public class Block {
 		int version = parentBlock.getNextBlockVersion();
 		byte[] reference = parentBlockData.getSignature();
 
+		// Qortal: minter is always a reward-share, so find actual minter and get their effective minting level
+		int minterLevel = Account.getRewardShareEffectiveMintingLevel(repository, minter.getPublicKey());
+		if (minterLevel == 0) {
+			LOGGER.error("Minter effective level returned zero?");
+			return null;
+		}
+
+		long timestamp = calcTimestamp(parentBlockData, minter.getPublicKey(), minterLevel);
+
 		// Fetch our list of online accounts
 		List<OnlineAccountData> onlineAccounts = OnlineAccountsManager.getInstance().getOnlineAccounts();
 		if (onlineAccounts.isEmpty()) {
@@ -355,25 +365,12 @@ public class Block {
 		byte[] encodedOnlineAccounts = BlockTransformer.encodeOnlineAccounts(onlineAccountsSet);
 		int onlineAccountsCount = onlineAccountsSet.size();
 
-		// Concatenate online account timestamp signatures (in correct order)
-		byte[] onlineAccountsSignatures = new byte[onlineAccountsCount * Transformer.SIGNATURE_LENGTH];
-		for (int i = 0; i < onlineAccountsCount; ++i) {
-			Integer accountIndex = accountIndexes.get(i);
-			OnlineAccountData onlineAccountData = indexedOnlineAccounts.get(accountIndex);
-			System.arraycopy(onlineAccountData.getSignature(), 0, onlineAccountsSignatures, i * Transformer.SIGNATURE_LENGTH, Transformer.SIGNATURE_LENGTH);
-		}
+		// Build the onlineAccountsSignatures byte array
+		byte[] onlineAccountsSignatures = BlockTransformer.encodeOnlineAccountSignatures(indexedOnlineAccounts,
+				accountIndexes, onlineAccountsCount, timestamp);
 
 		byte[] minterSignature = minter.sign(BlockTransformer.getBytesForMinterSignature(parentBlockData,
 				minter.getPublicKey(), encodedOnlineAccounts));
-
-		// Qortal: minter is always a reward-share, so find actual minter and get their effective minting level
-		int minterLevel = Account.getRewardShareEffectiveMintingLevel(repository, minter.getPublicKey());
-		if (minterLevel == 0) {
-			LOGGER.error("Minter effective level returned zero?");
-			return null;
-		}
-
-		long timestamp = calcTimestamp(parentBlockData, minter.getPublicKey(), minterLevel);
 
 		int transactionCount = 0;
 		byte[] transactionsSignature = null;
@@ -979,7 +976,14 @@ public class Block {
 		if (this.blockData.getOnlineAccountsSignatures() == null || this.blockData.getOnlineAccountsSignatures().length == 0)
 			return ValidationResult.ONLINE_ACCOUNT_SIGNATURES_MISSING;
 
-		if (this.blockData.getOnlineAccountsSignatures().length != onlineRewardShares.size() * Transformer.SIGNATURE_LENGTH)
+		// Verify the online account signatures length
+		int expectedLength;
+		if (this.blockData.getTimestamp() >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp())
+			expectedLength = onlineRewardShares.size() * (Transformer.SIGNATURE_LENGTH + Transformer.REDUCED_SIGNATURE_LENGTH + Transformer.INT_LENGTH + (OnlineAccountsManager.MAX_NONCE_COUNT * Transformer.INT_LENGTH));
+		else
+			expectedLength = onlineRewardShares.size() * Transformer.SIGNATURE_LENGTH;
+
+		if (this.blockData.getOnlineAccountsSignatures().length != expectedLength)
 			return ValidationResult.ONLINE_ACCOUNT_SIGNATURES_MALFORMED;
 
 		// Check signatures
@@ -993,17 +997,25 @@ public class Block {
 		List<OnlineAccountData> latestBlocksOnlineAccounts = OnlineAccountsManager.getInstance().getLatestBlocksOnlineAccounts();
 
 		// Extract online accounts' timestamp signatures from block data
-		List<byte[]> onlineAccountsSignatures = BlockTransformer.decodeTimestampSignatures(this.blockData.getOnlineAccountsSignatures());
+		List<OnlineAccountData> onlineAccountsSignatures = BlockTransformer.decodeOnlineAccountSignatures(
+				this.blockData.getOnlineAccountsSignatures(), onlineRewardShares.size(), this.blockData.getTimestamp());
 
 		// We'll build up a list of online accounts to hand over to Controller if block is added to chain
 		// and this will become latestBlocksOnlineAccounts (above) to reduce CPU load when we process next block...
 		List<OnlineAccountData> ourOnlineAccounts = new ArrayList<>();
 
 		for (int i = 0; i < onlineAccountsSignatures.size(); ++i) {
-			byte[] signature = onlineAccountsSignatures.get(i);
+			// onlineAccountsSignatures will contain OnlineAccountData objects with at least a signature, and
+			// also a reduced block signature and nonce(s) if the mempow feature is active.
+			// It won't contain a public key or timestamp, so these must be added below.
+			OnlineAccountData onlineAccountSignatureData = onlineAccountsSignatures.get(i);
+			byte[] signature = onlineAccountSignatureData.getSignature();
+			byte[] reducedBlockSignature = onlineAccountSignatureData.getReducedBlockSignature();
+			List<Integer> nonces = onlineAccountSignatureData.getNonces();
 			byte[] publicKey = onlineRewardShares.get(i).getRewardSharePublicKey();
 
-			OnlineAccountData onlineAccountData = new OnlineAccountData(onlineTimestamp, signature, publicKey);
+			// It's simpler to create a new OnlineAccountData object rather than trying to modify the one we already have
+			OnlineAccountData onlineAccountData = new OnlineAccountData(onlineTimestamp, signature, publicKey, nonces, reducedBlockSignature);
 			ourOnlineAccounts.add(onlineAccountData);
 
 			// If signature is still current then no need to perform Ed25519 verify
@@ -1018,6 +1030,10 @@ public class Block {
 
 			if (!Crypto.verify(publicKey, signature, onlineTimestampBytes))
 				return ValidationResult.ONLINE_ACCOUNT_SIGNATURE_INCORRECT;
+
+			if (this.blockData.getTimestamp() >= BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp())
+				if (!OnlineAccountsManager.getInstance().verifyMemoryPoW(onlineAccountData))
+					return ValidationResult.ONLINE_ACCOUNT_NONCE_INCORRECT;
 		}
 
 		// All online accounts valid, so save our list of online accounts for potential later use
