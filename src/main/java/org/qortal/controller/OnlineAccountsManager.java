@@ -28,6 +28,8 @@ import java.util.*;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import static org.qortal.transform.Transformer.REDUCED_SIGNATURE_LENGTH;
+
 public class OnlineAccountsManager extends Thread {
 
     private class OurOnlineAccountsThread extends Thread {
@@ -415,7 +417,7 @@ public class OnlineAccountsManager extends Thread {
                     LOGGER.info("Unable to compute online accounts without having a recent block");
                     return false;
                 }
-                byte[] reducedRecentBlockSignature = Arrays.copyOfRange(recentBlockData.getSignature(), 0, 8);
+                byte[] reducedRecentBlockSignature = Arrays.copyOfRange(recentBlockData.getSignature(), 0, REDUCED_SIGNATURE_LENGTH);
 
                 byte[] mempowBytes;
                 try {
