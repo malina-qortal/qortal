@@ -351,13 +351,17 @@ public class OnlineAccountsManager extends Thread {
             return;
         }
 
-        // 'current' timestamp
+        // 'next' timestamp (prioritize this as it's the most important)
+        final long nextOnlineAccountsTimestamp = toOnlineAccountTimestamp(now) + getOnlineTimestampModulus();
+        boolean success = computeOurAccountsForTimestamp(mintingAccounts, nextOnlineAccountsTimestamp);
+        if (!success) {
+            // We didn't compute the required nonce value(s), and so can't proceed until they have been retried
+            return;
+        }
+
+        // 'current' timestamp (if there's enough time after successfully computing the 'next' timestamps)
         final long onlineAccountsTimestamp = toOnlineAccountTimestamp(now);
         computeOurAccountsForTimestamp(mintingAccounts, onlineAccountsTimestamp);
-
-        // 'next' timestamp // TODO
-//        final long nextOnlineAccountsTimestamp = toOnlineAccountTimestamp(now) + getOnlineTimestampModulus();
-//        computeOurAccountsForTimestamp(mintingAccounts, nextOnlineAccountsTimestamp);
     }
 
     /**
@@ -365,7 +369,7 @@ public class OnlineAccountsManager extends Thread {
      * @param mintingAccounts - the online accounts
      * @param onlineAccountsTimestamp - the online accounts timestamp
      */
-    private void computeOurAccountsForTimestamp(List<MintingAccountData> mintingAccounts, long onlineAccountsTimestamp) {
+    private boolean computeOurAccountsForTimestamp(List<MintingAccountData> mintingAccounts, long onlineAccountsTimestamp) {
         try (final Repository repository = RepositoryManager.getRepository()) {
 
             boolean hasInfoChanged = false;
@@ -409,7 +413,7 @@ public class OnlineAccountsManager extends Thread {
                 BlockData recentBlockData = repository.getBlockRepository().fromHeight(referenceHeight);
                 if (recentBlockData == null || recentBlockData.getSignature() == null) {
                     LOGGER.info("Unable to compute online accounts without having a recent block");
-                    return;
+                    return false;
                 }
                 byte[] reducedRecentBlockSignature = Arrays.copyOfRange(recentBlockData.getSignature(), 0, 8);
 
@@ -422,8 +426,20 @@ public class OnlineAccountsManager extends Thread {
                     continue MINTING_ACCOUNTS;
                 }
 
-                Integer nonce = this.computeMemoryPoW(mempowBytes, publicKey);
-                if (nonce == null) {
+                Integer nonce;
+                if (isMemoryPoWActive()) {
+                    try {
+                        nonce = this.computeMemoryPoW(mempowBytes, publicKey, onlineAccountsTimestamp);
+                        if (nonce == null) {
+                            // A nonce is required
+                            return false;
+                        }
+                    } catch (TimeoutException e) {
+                        LOGGER.info(String.format("Timed out computing nonce for account %.8s", Base58.encode(publicKey)));
+                        return false;
+                    }
+                }
+                else {
                     // Send zero if we haven't computed a nonce due to feature trigger timestamp
                     nonce = 0;
                 }
@@ -432,15 +448,20 @@ public class OnlineAccountsManager extends Thread {
 
                 OnlineAccountData ourOnlineAccountData = new OnlineAccountData(onlineAccountsTimestamp, signature, publicKey, Arrays.asList(nonce), reducedRecentBlockSignature);
 
-                this.onlineAccounts.add(ourOnlineAccountData);
+                // Make sure to verify before adding
+                if (verifyMemoryPoW(ourOnlineAccountData)) {
+                    this.onlineAccounts.add(ourOnlineAccountData);
 
-                LOGGER.trace(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
-                ourOnlineAccounts.add(ourOnlineAccountData);
-                hasInfoChanged = true;
+                    LOGGER.trace(() -> String.format("Added our online account %s with timestamp %d", mintingAccount.getAddress(), onlineAccountsTimestamp));
+                    ourOnlineAccounts.add(ourOnlineAccountData);
+                    hasInfoChanged = true;
+                }
             }
 
-            if (!hasInfoChanged)
-                return;
+            if (!hasInfoChanged) {
+                // Nothing to do
+                return true;
+            }
 
             Message messageV2 = new OnlineAccountsV2Message(ourOnlineAccounts);
             Message messageV3 = new OnlineAccountsV3Message(ourOnlineAccounts);
@@ -450,9 +471,11 @@ public class OnlineAccountsManager extends Thread {
             );
 
             LOGGER.trace(() -> String.format("Broadcasted %d online account%s with timestamp %d", ourOnlineAccounts.size(), (ourOnlineAccounts.size() != 1 ? "s" : ""), onlineAccountsTimestamp));
+            return true;
 
         } catch (DataException e) {
             LOGGER.error(String.format("Repository issue while computing online accounts"), e);
+            return false;
         }
     }
 
@@ -467,35 +490,29 @@ public class OnlineAccountsManager extends Thread {
         return outputStream.toByteArray();
     }
 
-    private Integer computeMemoryPoW(byte[] bytes, byte[] publicKey) {
-        Long startTime = NTP.getTime();
-        if (startTime < BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp() || Settings.getInstance().isOnlineAccountsMemPoWEnabled()) {
+    private Integer computeMemoryPoW(byte[] bytes, byte[] publicKey, long onlineAccountsTimestamp) throws TimeoutException {
+        if (!isMemoryPoWActive()) {
             LOGGER.info("Mempow start timestamp not yet reached, and onlineAccountsMemPoWEnabled not enabled in settings");
             return null;
         }
 
-        LOGGER.info(String.format("Computing nonce for account %.8s...", Base58.encode(publicKey)));
+        LOGGER.info(String.format("Computing nonce for account %.8s and timestamp %d...", Base58.encode(publicKey), onlineAccountsTimestamp));
 
         // Calculate the time until the next online timestamp and use it as a timeout when computing the nonce
+        Long startTime = NTP.getTime();
         final long nextOnlineAccountsTimestamp = toOnlineAccountTimestamp(startTime) + getOnlineTimestampModulus();
         long timeUntilNextTimestamp = nextOnlineAccountsTimestamp - startTime;
 
-        Integer nonce;
-        try {
-            nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, POW_DIFFICULTY, timeUntilNextTimestamp);
-        } catch (TimeoutException e) {
-            LOGGER.info(String.format("Timed out computing nonce for account %.8s", Base58.encode(publicKey)));
-            return null;
-        }
+        Integer nonce = MemoryPoW.compute2(bytes, POW_BUFFER_SIZE, POW_DIFFICULTY, timeUntilNextTimestamp);
 
         double totalSeconds = (NTP.getTime() - startTime) / 1000.0f;
         int minutes = (int) ((totalSeconds % 3600) / 60);
         int seconds = (int) (totalSeconds % 60);
         double hashRate = nonce / totalSeconds;
 
-        LOGGER.info(String.format("Computed nonce for account %.8s: %d. Buffer size: %d. Difficulty: %d. " +
-                        "Time taken: %02d:%02d. Hashrate: %f", Base58.encode(publicKey), nonce,
-                POW_BUFFER_SIZE, POW_DIFFICULTY, minutes, seconds, hashRate));
+        LOGGER.info(String.format("Computed nonce for timestamp %d and account %.8s: %d. Buffer size: %d. Difficulty: %d. " +
+                        "Time taken: %02d:%02d. Hashrate: %f", onlineAccountsTimestamp, Base58.encode(publicKey),
+                nonce, POW_BUFFER_SIZE, POW_DIFFICULTY, minutes, seconds, hashRate));
 
         return nonce;
     }
@@ -570,6 +587,14 @@ public class OnlineAccountsManager extends Thread {
         synchronized (this.latestBlocksOnlineAccounts) {
             this.latestBlocksOnlineAccounts.pollFirst();
         }
+    }
+
+    private boolean isMemoryPoWActive() {
+        Long now = NTP.getTime();
+        if (now < BlockChain.getInstance().getOnlineAccountsMemoryPoWTimestamp() || Settings.getInstance().isOnlineAccountsMemPoWEnabled()) {
+            return false;
+        }
+        return true;
     }
 
 
